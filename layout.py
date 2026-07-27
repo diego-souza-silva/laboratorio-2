@@ -211,6 +211,9 @@ def _aba_conversao_crm() -> html.Div:
         dbc.Row([
             dbc.Col(_grafico_card("Funil de Conversão Pós-SMS", "grafico-funil-crm"), md=6),
             dbc.Col(_grafico_card("Ações de CRM por Campanha", "grafico-crm-campanha"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=12),
         ], className="g-3"),
     ])
 

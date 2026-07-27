@@ -6,8 +6,9 @@ from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    agregar_crm_por_campanha, agregar_por_campanha, agregar_por_grupo_ab, calcular_funil,
-    calcular_kpis, carregar_dados_crm, carregar_dados_sms, filtrar_dados,
+    agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_por_campanha,
+    agregar_por_grupo_ab, calcular_funil, calcular_kpis, carregar_dados_crm,
+    carregar_dados_sms, filtrar_dados,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -112,6 +113,7 @@ def registrar_callbacks(app):
         Output("kpi-crm-acordo", "children"),
         Output("grafico-funil-crm", "figure"),
         Output("grafico-crm-campanha", "figure"),
+        Output("grafico-crm-grupo-ab", "figure"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -144,8 +146,15 @@ def registrar_callbacks(app):
         )
 
         crm_completo = carregar_dados_crm()
-        crm_filtrado = crm_completo[crm_completo["utm_campaign"].isin(utms)] if utms else crm_completo
+        crm_filtrado = crm_completo
+        if utms:
+            crm_filtrado = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms)]
+        if grupos_ab:
+            crm_filtrado = crm_filtrado[crm_filtrado["grupo_ab"].isin(grupos_ab)]
         crm_agregado = agregar_crm_por_campanha(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
+        crm_agregado_grupo_ab = (
+            agregar_crm_por_grupo_ab(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
+        )
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
@@ -177,4 +186,5 @@ def registrar_callbacks(app):
             formatar_numero(totais_crm["acordo"]),
             charts.grafico_funil_crm(crm_agregado),
             charts.grafico_crm_por_campanha(crm_agregado),
+            charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
         )

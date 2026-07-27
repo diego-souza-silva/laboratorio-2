@@ -144,6 +144,15 @@ def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     return df
 
 
+def _normalizar_telefone_com_ddi(valor) -> str:
+    """Telefones do log de CRM vêm com DDI 55 (13 dígitos); remove o DDI para
+    ficar no mesmo formato (DDD+numero, 10-11 dígitos) usado no restante da base."""
+    digitos = normalizar_telefone(valor)
+    if len(digitos) == 13 and digitos.startswith("55"):
+        return digitos[2:]
+    return digitos
+
+
 def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o log de CRM (aba de conversão pós-SMS), filtrado às campanhas em escopo."""
     if not forcar_reload and "crm" in _cache:
@@ -156,6 +165,10 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     df["timestamp"] = df["data"].apply(parse_data_pt_br)
     df["acao_norm"] = df["acao"].str.strip().str.lower()
     df = df[df["acao_norm"].isin(ETAPAS_CRM)]
+
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
+    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
 
     _cache["crm"] = df
     return df
@@ -276,16 +289,27 @@ def agregar_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
-def agregar_crm_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
-    """Conta ações de CRM (home/auth/oferta/acordo) por campanha, na ordem do funil de conversão."""
-    contagem = (
-        df.groupby(["utm_campaign", "acao_norm"]).size().rename("quantidade").reset_index()
-    )
-    tabela = contagem.pivot(index="utm_campaign", columns="acao_norm", values="quantidade").fillna(0)
+def _agregar_crm_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
+    contagem = df.groupby([coluna, "acao_norm"]).size().rename("quantidade").reset_index()
+    tabela = contagem.pivot(index=coluna, columns="acao_norm", values="quantidade").fillna(0)
     for etapa in ETAPAS_CRM:
         if etapa not in tabela.columns:
             tabela[etapa] = 0
     return tabela[ETAPAS_CRM].astype(int).reset_index()
+
+
+def agregar_crm_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
+    """Conta ações de CRM (home/auth/oferta/acordo) por campanha, na ordem do funil de conversão."""
+    return _agregar_crm_por(df, "utm_campaign")
+
+
+def agregar_crm_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
+    """Conta ações de CRM (home/auth/oferta/acordo) por grupo_ab, ordenado por prioridade."""
+    tabela = _agregar_crm_por(df, "grupo_ab")
+    tabela["ordem"] = tabela["grupo_ab"].apply(
+        lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+    )
+    return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
 def extremos_data_hora(df: pd.DataFrame) -> tuple:
