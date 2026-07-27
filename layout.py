@@ -188,10 +188,15 @@ def criar_layout() -> html.Div:
             _painel_filtros(),
             _linha_kpis(),
 
-            dbc.Tabs([
-                dbc.Tab(_aba_funil_sms(), label="Funil de SMS", tab_id="tab-sms"),
-                dbc.Tab(_aba_conversao_crm(), label="Conversão Pós-SMS (CRM)", tab_id="tab-crm"),
-            ], active_tab="tab-sms", className="mb-3"),
+            html.Div([
+                html.Button("Funil de SMS", id="btn-tab-sms", n_clicks=0,
+                            className="aba-botao aba-ativa"),
+                html.Button("Conversão Pós-SMS (CRM)", id="btn-tab-crm", n_clicks=0,
+                            className="aba-botao"),
+            ], className="barra-abas"),
+
+            html.Div(_aba_funil_sms(), id="painel-tab-sms"),
+            html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
         ],
         fluid=True,
         className="container-dashboard",

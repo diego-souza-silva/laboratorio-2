@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from dash import Input, Output, dash_table, html
+from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
@@ -61,6 +61,19 @@ def _tabela_executiva_component(agregado: pd.DataFrame):
 
 
 def registrar_callbacks(app):
+    @app.callback(
+        Output("painel-tab-sms", "style"),
+        Output("painel-tab-crm", "style"),
+        Output("btn-tab-sms", "className"),
+        Output("btn-tab-crm", "className"),
+        Input("btn-tab-sms", "n_clicks"),
+        Input("btn-tab-crm", "n_clicks"),
+    )
+    def alternar_aba(_n_sms, _n_crm):
+        if ctx.triggered_id == "btn-tab-crm":
+            return {"display": "none"}, {"display": "block"}, "aba-botao", "aba-botao aba-ativa"
+        return {"display": "block"}, {"display": "none"}, "aba-botao aba-ativa", "aba-botao"
+
     @app.callback(
         Output("kpi-disparado", "children"),
         Output("kpi-enviado", "children"),

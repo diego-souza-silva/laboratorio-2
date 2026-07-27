@@ -99,14 +99,35 @@ body {
   font-weight: 600;
 }
 
-.nav-tabs .nav-link.active {
-  color: var(--azul) !important;
-  background: transparent !important;
-  border-bottom: 2px solid var(--azul);
+.barra-abas {
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--borda);
+  margin-bottom: 16px;
 }
 
-.tab-pane:not(.active) {
-  display: none !important;
+.aba-botao {
+  background: transparent;
+  border: none;
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 10px 2px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.aba-botao:hover {
+  color: var(--texto);
+}
+
+.aba-botao:focus {
+  outline: none;
+}
+
+.aba-botao.aba-ativa {
+  color: var(--azul);
+  border-bottom-color: var(--azul);
 }
 
 /* dcc.Dropdown em tema escuro */
