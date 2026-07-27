@@ -50,9 +50,11 @@ Pós-SMS" — não participa do funil de envio/entrega. Todo `.csv` desta pasta 
 concatenado (dá pra ir empilhando um export por dia); se tiver coluna `ID`, a deduplicação
 é automática por ela.
 
-### `data/raw/base_segmentacao_grupo_ab.csv`
-Snapshot único (fora das 3 pastas acima) — **substitua sempre pela versão mais nova** da
-base de clientes usada no cruzamento do grupo_ab.
+### `data/raw/ARQUIVO DA BASE INTEIRA/`
+Base de clientes usada no cruzamento do grupo_ab (qualquer nome de arquivo `.csv`). É
+tratada como **snapshot**: se colocar uma versão nova, pode deixar a antiga ali também —
+a deduplicação por `CPF` é automática (mantendo a linha mais recente), então não precisa
+apagar nada manualmente.
 
 ## Modelo do funil
 
@@ -68,7 +70,7 @@ incluída no dashboard.
 
 ## Segmentação por Grupo AB
 
-`data/raw/base_segmentacao_grupo_ab.csv` é a base de clientes (uma linha por CPF, com
+`data/raw/ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com
 colunas `FONE_1`..`FONE_4` e `grupo_ab`). Como os arquivos de SMS só têm telefone (não têm
 CPF), o cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4` são explodidas em
 formato longo e viram um mapa `telefone -> grupo_ab` (equivalente ao PROCX/VLOOKUP manual

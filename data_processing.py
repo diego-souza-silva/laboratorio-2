@@ -29,6 +29,7 @@ RAW_DIR = Path(__file__).parent / "data" / "raw"
 DIR_DISPARO = RAW_DIR / "ARQUIVOS PARA DISPAROS"
 DIR_RETORNO = RAW_DIR / "ARQUIVOS DE RETORNO"
 DIR_LOG_CRM = RAW_DIR / "ARQUIVOS LOG"
+DIR_BASE_GRUPO_AB = RAW_DIR / "ARQUIVO DA BASE INTEIRA"
 
 LIMIAR_VINCULO_RETORNO = 0.8
 
@@ -104,7 +105,6 @@ ETAPAS_CRM_NUMERO = {
     "acordo": "4º Acordo Gerado",
 }
 
-ARQUIVO_GRUPO_AB = RAW_DIR / "base_segmentacao_grupo_ab.csv"
 NAO_CLASSIFICADO = "Não Classificado"
 GRUPO_AB_ORDEM = ["P1_MAXIMA", "P2_ALTA", "P3_MEDIA", "P4_BAIXA", NAO_CLASSIFICADO]
 
@@ -168,15 +168,24 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
 
 
 def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
-    """Monta o mapa telefone -> grupo_ab a partir da base de segmentação (equivalente ao
-    PROCX manual: explode as colunas FONE_1..FONE_4 e associa cada telefone ao grupo_ab
-    da linha do cliente)."""
+    """Monta o mapa telefone -> grupo_ab a partir da base de segmentação em
+    `ARQUIVO DA BASE INTEIRA/` (equivalente ao PROCX manual: explode as colunas
+    FONE_1..FONE_4 e associa cada telefone ao grupo_ab da linha do cliente). Lê todo
+    `.csv` da pasta — se sobrar mais de um (ex.: versão antiga não apagada), deduplica
+    por CPF mantendo a última."""
     if not forcar_reload and "grupo_ab_mapa" in _cache:
         return _cache["grupo_ab_mapa"]
 
-    base = ler_csv_auto(ARQUIVO_GRUPO_AB)
-    colunas_fone = [c for c in base.columns if c.startswith("fone_")]
+    arquivos = sorted(DIR_BASE_GRUPO_AB.glob("*.csv"))
+    if not arquivos:
+        _cache["grupo_ab_mapa"] = {}
+        return {}
 
+    base = pd.concat([ler_csv_auto(a) for a in arquivos], ignore_index=True)
+    if "cpf" in base.columns:
+        base = base.drop_duplicates("cpf", keep="last")
+
+    colunas_fone = [c for c in base.columns if c.startswith("fone_")]
     partes = [base[[coluna, "grupo_ab"]].rename(columns={coluna: "fone"}) for coluna in colunas_fone]
     longo = pd.concat(partes, ignore_index=True)
     longo["fone_norm"] = longo["fone"].apply(normalizar_telefone)
