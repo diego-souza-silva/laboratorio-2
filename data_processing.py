@@ -21,12 +21,20 @@ from utils import normalizar_telefone, parse_data_pt_br, taxa
 
 RAW_DIR = Path(__file__).parent / "data" / "raw"
 
-CAMPANHAS_ESCOPO = [
-    "20260725-abandonocarrinhodia25-kolmeya",
-    "20260725-engajadodia25-kolmeya",
-    "20260725-topofunildia25-kolmeya",
-    "20260725-cadastradodia25-kolmeya",
-]
+
+def descobrir_campanhas() -> list[str]:
+    """Descobre automaticamente as campanhas em escopo a partir dos arquivos em data/raw/:
+    toda UTM que tiver o par `{utm}_disparo.csv` + `{utm}_log.csv` entra no dashboard.
+    Basta soltar os arquivos novos na pasta e reiniciar o app — não precisa editar código."""
+    campanhas = []
+    for disparo in sorted(RAW_DIR.glob("*_disparo.csv")):
+        utm = disparo.name[: -len("_disparo.csv")]
+        if (RAW_DIR / f"{utm}_log.csv").exists():
+            campanhas.append(utm)
+    return campanhas
+
+
+CAMPANHAS_ESCOPO = descobrir_campanhas()
 
 STATUS_FUNIL_ORDEM = ["Entregue", "Pendente", "Falhou", "Nao Processado"]
 

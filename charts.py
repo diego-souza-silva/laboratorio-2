@@ -1,6 +1,8 @@
 """Construção dos gráficos Plotly do dashboard (tema escuro, estilo executivo)."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -20,12 +22,14 @@ FUNDO_PLOT = "rgba(0,0,0,0)"
 COR_FONTE = "#E5E9F0"
 COR_GRADE = "rgba(255,255,255,0.08)"
 
-NOME_CURTO_UTM = {
-    "20260725-abandonocarrinhodia25-kolmeya": "Abandono Carrinho",
-    "20260725-engajadodia25-kolmeya": "Engajado",
-    "20260725-topofunildia25-kolmeya": "Topo de Funil",
-    "20260725-cadastradodia25-kolmeya": "Cadastrado",
+NOME_LEGIVEL_SLUG = {
+    "abandonocarrinho": "Abandono Carrinho",
+    "engajado": "Engajado",
+    "topofunil": "Topo de Funil",
+    "cadastrado": "Cadastrado",
 }
+
+_PADRAO_UTM = re.compile(r"^\d{4}(\d{2})(\d{2})-(.+?)dia\d+-\w+$", re.IGNORECASE)
 
 GRUPO_AB_LABEL = {
     "P1_MAXIMA": "P1 · Máxima",
@@ -37,7 +41,15 @@ GRUPO_AB_LABEL = {
 
 
 def nome_curto(utm: str) -> str:
-    return NOME_CURTO_UTM.get(utm, utm)
+    """Rótulo legível para uma UTM. Reconhece o padrão AAAAMMDD-{slug}diaDD-{plataforma}
+    (independente da data), então novas campanhas diárias já saem com nome bonito
+    sem precisar editar código — só a data muda no rótulo."""
+    match = _PADRAO_UTM.match(utm)
+    if not match:
+        return utm
+    mes, dia, slug = match.groups()
+    rotulo = NOME_LEGIVEL_SLUG.get(slug.lower(), slug)
+    return f"{rotulo} ({dia}/{mes})"
 
 
 def _layout_base(fig: go.Figure, titulo: str | None = None, altura: int = 340) -> go.Figure:
