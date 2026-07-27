@@ -47,3 +47,14 @@ arquivo de disparo/log enviado. `LOG_CB_LABORATORIO_crm.csv` é um log de CRM (n
 de SMS) usado só na aba auxiliar "Conversão Pós-SMS", com o funil Home → Autenticação →
 Oferta → Acordo. Não há coluna de operadora (Claro/Vivo/TIM/Oi) em nenhum arquivo, então
 essa seção não foi incluída.
+
+## Segmentação por Grupo AB
+
+`data/raw/base_segmentacao_grupo_ab.csv` é a base de clientes (uma linha por CPF, com
+colunas `FONE_1`..`FONE_4` e `grupo_ab`). Como os logs de SMS só têm telefone (não têm
+CPF), o cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4` são explodidas em
+formato longo e viram um mapa `telefone -> grupo_ab` (equivalente ao PROCX/VLOOKUP manual
+"doc por doc"), aplicado depois a cada evento de SMS. Telefones que não aparecem na base
+viram `Não Classificado`. Isso alimenta o filtro global "Grupo AB" e a aba "Funil por
+Grupo AB" (volume, taxa de entrega e tabela executiva por `P1_MAXIMA`, `P2_ALTA`,
+`P3_MEDIA`, `P4_BAIXA`).

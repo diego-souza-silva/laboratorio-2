@@ -45,6 +45,10 @@ ETAPAS_CRM_LABEL = {
     "acordo": "Acordo Gerado",
 }
 
+ARQUIVO_GRUPO_AB = RAW_DIR / "base_segmentacao_grupo_ab.csv"
+NAO_CLASSIFICADO = "Não Classificado"
+GRUPO_AB_ORDEM = ["P1_MAXIMA", "P2_ALTA", "P3_MEDIA", "P4_BAIXA", NAO_CLASSIFICADO]
+
 _cache: dict[str, pd.DataFrame] = {}
 
 
@@ -98,6 +102,26 @@ def _carregar_campanha(utm: str) -> pd.DataFrame:
     return eventos
 
 
+def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
+    """Monta o mapa telefone -> grupo_ab a partir da base de segmentação (equivalente ao
+    PROCX manual: explode as colunas FONE_1..FONE_4 e associa cada telefone ao grupo_ab
+    da linha do cliente)."""
+    if not forcar_reload and "grupo_ab_mapa" in _cache:
+        return _cache["grupo_ab_mapa"]
+
+    base = ler_csv_auto(ARQUIVO_GRUPO_AB)
+    colunas_fone = [c for c in base.columns if c.startswith("fone_")]
+
+    partes = [base[[coluna, "grupo_ab"]].rename(columns={coluna: "fone"}) for coluna in colunas_fone]
+    longo = pd.concat(partes, ignore_index=True)
+    longo["fone_norm"] = longo["fone"].apply(normalizar_telefone)
+    longo = longo[longo["fone_norm"] != ""].drop_duplicates("fone_norm", keep="first")
+
+    mapa = dict(zip(longo["fone_norm"], longo["grupo_ab"]))
+    _cache["grupo_ab_mapa"] = mapa
+    return mapa
+
+
 def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega e unifica os eventos das 4 campanhas Kolmeya (processamento único, cacheado)."""
     if not forcar_reload and "sms" in _cache:
@@ -112,6 +136,9 @@ def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     df["pendente"] = (df["status_raw"] == "enviado").astype(int)
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
+
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
 
     _cache["sms"] = df
     return df
@@ -142,6 +169,7 @@ def filtrar_dados(
     hora_ini: int | None = None,
     hora_fim: int | None = None,
     status: list[str] | None = None,
+    grupos_ab: list[str] | None = None,
 ) -> pd.DataFrame:
     """Aplica os filtros globais do dashboard sobre o dataframe de eventos de SMS."""
     filtrado = df
@@ -149,6 +177,8 @@ def filtrar_dados(
         filtrado = filtrado[filtrado["utm_campaign"].isin(utms)]
     if status:
         filtrado = filtrado[filtrado["status_funil"].isin(status)]
+    if grupos_ab:
+        filtrado = filtrado[filtrado["grupo_ab"].isin(grupos_ab)]
     if data_ini is not None and data_fim is not None:
         no_periodo = filtrado["data"].isna() | (
             (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
@@ -210,9 +240,8 @@ def calcular_funil(df: pd.DataFrame) -> list[dict]:
     return resultado
 
 
-def agregar_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
-    """Tabela executiva por UTM, ordenada da maior para a menor volumetria disparada."""
-    agrupado = df.groupby("utm_campaign").agg(
+def _agregar_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
+    agrupado = df.groupby(coluna).agg(
         total_disparado=("disparado", "sum"),
         total_enviado=("enviado", "sum"),
         total_entregue=("entregue", "sum"),
@@ -228,7 +257,23 @@ def agregar_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
     agrupado["taxa_falha"] = agrupado.apply(
         lambda r: taxa(r["total_falhado"], r["total_enviado"]), axis=1
     )
+    return agrupado
+
+
+def agregar_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
+    """Tabela executiva por UTM, ordenada da maior para a menor volumetria disparada."""
+    agrupado = _agregar_por(df, "utm_campaign")
     return agrupado.sort_values("total_disparado", ascending=False).reset_index(drop=True)
+
+
+def agregar_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por grupo_ab (segmentação de propensão), ordenada por prioridade
+    P1_MAXIMA -> P4_BAIXA -> Não Classificado (equivalente ao PROCX manual)."""
+    agrupado = _agregar_por(df, "grupo_ab")
+    agrupado["ordem"] = agrupado["grupo_ab"].apply(
+        lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+    )
+    return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
 def agregar_crm_por_campanha(df: pd.DataFrame) -> pd.DataFrame:

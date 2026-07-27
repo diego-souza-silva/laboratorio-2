@@ -5,7 +5,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, STATUS_FUNIL_ORDEM, carregar_dados_sms, extremos_data_hora,
+    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms, extremos_data_hora,
 )
 from charts import nome_curto
 
@@ -14,6 +14,14 @@ STATUS_LABEL = {
     "Pendente": "Pendente (em trânsito)",
     "Falhou": "Falhou",
     "Nao Processado": "Não Processado",
+}
+
+GRUPO_AB_LABEL = {
+    "P1_MAXIMA": "P1 · Máxima",
+    "P2_ALTA": "P2 · Alta",
+    "P3_MEDIA": "P3 · Média",
+    "P4_BAIXA": "P4 · Baixa",
+    "Não Classificado": "Não Classificado",
 }
 
 
@@ -89,6 +97,17 @@ def _painel_filtros() -> dbc.Card:
                     ),
                 ], md=2),
             ], className="g-3 align-items-end"),
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Grupo AB (segmentação de propensão)", className="rotulo-filtro"),
+                    dcc.Dropdown(
+                        id="filtro-grupo-ab",
+                        options=[{"label": GRUPO_AB_LABEL.get(g, g), "value": g} for g in GRUPO_AB_ORDEM],
+                        value=GRUPO_AB_ORDEM, multi=True, placeholder="Todos os grupos",
+                        className="dash-dropdown-escuro",
+                    ),
+                ], md=6),
+            ], className="g-3 align-items-end mt-1"),
             html.P(
                 "Números de disparo sem confirmação de horário na plataforma (\"Não Processado\") "
                 "são mantidos em todos os filtros de Data/Hora, já que não têm um momento de "
@@ -148,6 +167,31 @@ def _aba_funil_sms() -> html.Div:
     ])
 
 
+def _aba_grupo_ab() -> html.Div:
+    return html.Div([
+        dbc.Alert(
+            [
+                html.I(className="bi bi-info-circle-fill me-2"),
+                "Segmentação de propensão (grupo_ab) trazida da base de clientes via "
+                "cruzamento por telefone (equivalente ao PROCX manual). Telefones não "
+                "encontrados na base aparecem como \"Não Classificado\".",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Volume por Grupo AB", "grafico-volume-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB", "grafico-taxa-entrega-grupo-ab"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Grupo AB", className="mb-3"),
+                html.Div(id="tabela-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
+    ])
+
+
 def _aba_conversao_crm() -> html.Div:
     return html.Div([
         dbc.Alert(
@@ -191,11 +235,14 @@ def criar_layout() -> html.Div:
             html.Div([
                 html.Button("Funil de SMS", id="btn-tab-sms", n_clicks=0,
                             className="aba-botao aba-ativa"),
+                html.Button("Funil por Grupo AB", id="btn-tab-grupo", n_clicks=0,
+                            className="aba-botao"),
                 html.Button("Conversão Pós-SMS (CRM)", id="btn-tab-crm", n_clicks=0,
                             className="aba-botao"),
             ], className="barra-abas"),
 
             html.Div(_aba_funil_sms(), id="painel-tab-sms"),
+            html.Div(_aba_grupo_ab(), id="painel-tab-grupo", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
         ],
         fluid=True,

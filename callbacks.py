@@ -6,13 +6,18 @@ from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    agregar_crm_por_campanha, agregar_por_campanha, calcular_funil, calcular_kpis,
-    carregar_dados_crm, carregar_dados_sms, filtrar_dados,
+    agregar_crm_por_campanha, agregar_por_campanha, agregar_por_grupo_ab, calcular_funil,
+    calcular_kpis, carregar_dados_crm, carregar_dados_sms, filtrar_dados,
 )
 from utils import formatar_numero, formatar_percentual
 
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
+    "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_GRUPO_AB = [
+    "Grupo AB", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
     "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
 ]
 
@@ -35,14 +40,13 @@ def _tabela_funil_html(etapas: list[dict]) -> list:
     return linhas
 
 
-def _tabela_executiva_component(agregado: pd.DataFrame):
-    registros = charts.formatar_tabela_executiva(agregado)
+def _tabela_component(registros: list[dict], colunas: list[str]):
     if not registros:
         return html.P("Nenhum dado para os filtros selecionados.", className="text-muted")
 
     return dash_table.DataTable(
         data=registros,
-        columns=[{"name": nome, "id": nome} for nome in COLUNAS_TABELA_EXECUTIVA],
+        columns=[{"name": nome, "id": nome} for nome in colunas],
         sort_action="native",
         style_as_list_view=True,
         style_table={"overflowX": "auto"},
@@ -63,16 +67,23 @@ def _tabela_executiva_component(agregado: pd.DataFrame):
 def registrar_callbacks(app):
     @app.callback(
         Output("painel-tab-sms", "style"),
+        Output("painel-tab-grupo", "style"),
         Output("painel-tab-crm", "style"),
         Output("btn-tab-sms", "className"),
+        Output("btn-tab-grupo", "className"),
         Output("btn-tab-crm", "className"),
         Input("btn-tab-sms", "n_clicks"),
+        Input("btn-tab-grupo", "n_clicks"),
         Input("btn-tab-crm", "n_clicks"),
     )
-    def alternar_aba(_n_sms, _n_crm):
+    def alternar_aba(_n_sms, _n_grupo, _n_crm):
+        oculto, visivel = {"display": "none"}, {"display": "block"}
+        inativo, ativo = "aba-botao", "aba-botao aba-ativa"
+        if ctx.triggered_id == "btn-tab-grupo":
+            return oculto, visivel, oculto, inativo, ativo, inativo
         if ctx.triggered_id == "btn-tab-crm":
-            return {"display": "none"}, {"display": "block"}, "aba-botao", "aba-botao aba-ativa"
-        return {"display": "block"}, {"display": "none"}, "aba-botao aba-ativa", "aba-botao"
+            return oculto, oculto, visivel, inativo, inativo, ativo
+        return visivel, oculto, oculto, ativo, inativo, inativo
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -92,6 +103,9 @@ def registrar_callbacks(app):
         Output("grafico-ranking-campanhas", "figure"),
         Output("grafico-taxa-entrega", "figure"),
         Output("tabela-executiva-container", "children"),
+        Output("grafico-volume-grupo-ab", "figure"),
+        Output("grafico-taxa-entrega-grupo-ab", "figure"),
+        Output("tabela-grupo-ab-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -103,8 +117,9 @@ def registrar_callbacks(app):
         Input("filtro-data", "end_date"),
         Input("filtro-hora", "value"),
         Input("filtro-status", "value"),
+        Input("filtro-grupo-ab", "value"),
     )
-    def atualizar_dashboard(utms, data_ini, data_fim, faixa_hora, status):
+    def atualizar_dashboard(utms, data_ini, data_fim, faixa_hora, status, grupos_ab):
         df_completo = carregar_dados_sms()
 
         data_ini_dt = pd.to_datetime(data_ini).date() if data_ini else None
@@ -113,12 +128,15 @@ def registrar_callbacks(app):
 
         filtrado = filtrar_dados(
             df_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
-            hora_ini=hora_ini, hora_fim=hora_fim, status=status,
+            hora_ini=hora_ini, hora_fim=hora_fim, status=status, grupos_ab=grupos_ab,
         )
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
         agregado = agregar_por_campanha(filtrado) if not filtrado.empty else agregar_por_campanha(df_completo.iloc[0:0])
+        agregado_grupo_ab = (
+            agregar_por_grupo_ab(filtrado) if not filtrado.empty else agregar_por_grupo_ab(df_completo.iloc[0:0])
+        )
 
         legenda = (
             f"{formatar_numero(len(filtrado))} registros no filtro "
@@ -149,7 +167,10 @@ def registrar_callbacks(app):
             charts.grafico_status_sms(kpis),
             charts.grafico_ranking_campanhas(agregado),
             charts.grafico_taxa_entrega_campanha(agregado),
-            _tabela_executiva_component(agregado),
+            _tabela_component(charts.formatar_tabela_executiva(agregado), COLUNAS_TABELA_EXECUTIVA),
+            charts.grafico_volume_grupo_ab(filtrado),
+            charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
+            _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),

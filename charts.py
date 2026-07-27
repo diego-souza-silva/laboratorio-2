@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_processing import ETAPAS_CRM, ETAPAS_CRM_LABEL
+from data_processing import ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM
 from utils import formatar_numero, formatar_percentual
 
 CORES = {
@@ -177,6 +177,57 @@ def grafico_taxa_entrega_campanha(agregado: pd.DataFrame) -> go.Figure:
     )
     fig.update_xaxes(range=[0, 100])
     return _layout_base(fig, "Taxa de Entrega por Campanha")
+
+
+def grafico_volume_grupo_ab(df: pd.DataFrame) -> go.Figure:
+    if df.empty:
+        return _layout_base(go.Figure(), "Volume por Grupo AB (sem dados no período)")
+
+    ordem = [g for g in GRUPO_AB_ORDEM if g in df["grupo_ab"].unique()]
+    agrupado = df.groupby("grupo_ab")[["disparado", "enviado", "entregue", "falhou"]].sum().reindex(ordem)
+
+    fig = go.Figure()
+    for coluna, rotulo, chave_cor in [
+        ("disparado", "Disparado", "disparado"), ("enviado", "Enviado", "enviado"),
+        ("entregue", "Entregue", "entregue"), ("falhou", "Falhou", "falhou"),
+    ]:
+        fig.add_trace(go.Bar(x=agrupado.index, y=agrupado[coluna], name=rotulo, marker_color=CORES[chave_cor]))
+    fig.update_layout(barmode="group")
+    return _layout_base(fig, "Volume por Grupo AB (Segmentação de Propensão)")
+
+
+def grafico_taxa_entrega_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Taxa de Entrega por Grupo AB (sem dados no período)")
+
+    ordenado = agregado.iloc[::-1]
+    fig = go.Figure(
+        go.Bar(
+            y=ordenado["grupo_ab"], x=ordenado["taxa_entrega"], orientation="h",
+            marker_color=CORES["entregue"],
+            text=[formatar_percentual(v) for v in ordenado["taxa_entrega"]],
+            textposition="outside",
+            hovertemplate="%{y}<br>Taxa de Entrega: %{x:.1f}%<extra></extra>",
+        )
+    )
+    fig.update_xaxes(range=[0, 100])
+    return _layout_base(fig, "Taxa de Entrega por Grupo AB")
+
+
+def formatar_tabela_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "Grupo AB": linha["grupo_ab"],
+            "Total Disparado": formatar_numero(linha["total_disparado"]),
+            "Total Enviado": formatar_numero(linha["total_enviado"]),
+            "Total Entregue": formatar_numero(linha["total_entregue"]),
+            "Total Falhado": formatar_numero(linha["total_falhado"]),
+            "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
 
 
 def grafico_funil_crm(crm_agregado: pd.DataFrame) -> go.Figure:
