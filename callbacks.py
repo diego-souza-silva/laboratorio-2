@@ -6,9 +6,9 @@ from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_por_campanha,
+    CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_por_campanha,
     agregar_por_grupo_ab, calcular_funil, calcular_kpis, carregar_dados_crm,
-    carregar_dados_sms, filtrar_dados,
+    carregar_dados_sms, filtrar_dados, montar_pivot_crm,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -65,6 +65,62 @@ def _tabela_component(registros: list[dict], colunas: list[str]):
     )
 
 
+def _tabela_pivot_crm_component(colunas_utm: list[str], linhas: list[dict]):
+    if not linhas:
+        return html.P("Nenhum dado para os filtros selecionados.", className="text-muted")
+
+    colunas = (
+        [{"name": "Ação / Grupo AB", "id": "rotulo"}]
+        + [{"name": charts.nome_curto(u), "id": u} for u in colunas_utm]
+        + [{"name": "Total Geral", "id": "Total Geral"}]
+    )
+
+    registros = []
+    indices_destaque = []
+    indice_total_geral = None
+    for i, linha in enumerate(linhas):
+        rotulo = linha["rotulo"]
+        if linha["nivel"] == "detalhe":
+            rotulo = "     " + charts.GRUPO_AB_LABEL.get(rotulo, rotulo)
+        else:
+            indices_destaque.append(i)
+        if linha["nivel"] == "total_geral":
+            indice_total_geral = i
+
+        registro = {"rotulo": rotulo}
+        for u in colunas_utm:
+            registro[u] = formatar_numero(linha.get(u, 0))
+        registro["Total Geral"] = formatar_numero(linha["Total Geral"])
+        registros.append(registro)
+
+    style_data_conditional = [{"if": {"row_index": "odd"}, "backgroundColor": "#121722"}]
+    style_data_conditional += [
+        {"if": {"row_index": i}, "backgroundColor": "#1E2735", "fontWeight": "700"}
+        for i in indices_destaque
+    ]
+    if indice_total_geral is not None:
+        style_data_conditional.append(
+            {"if": {"row_index": indice_total_geral}, "backgroundColor": "#22304a", "fontWeight": "700"}
+        )
+
+    return dash_table.DataTable(
+        data=registros,
+        columns=colunas,
+        style_as_list_view=True,
+        style_table={"overflowX": "auto"},
+        style_header={
+            "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
+            "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
+        },
+        style_cell={
+            "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
+            "padding": "8px 12px", "fontSize": "0.83rem",
+        },
+        style_cell_conditional=[{"if": {"column_id": "rotulo"}, "textAlign": "left"}],
+        style_data_conditional=style_data_conditional,
+    )
+
+
 def registrar_callbacks(app):
     @app.callback(
         Output("painel-tab-sms", "style"),
@@ -114,6 +170,7 @@ def registrar_callbacks(app):
         Output("grafico-funil-crm", "figure"),
         Output("grafico-crm-campanha", "figure"),
         Output("grafico-crm-grupo-ab", "figure"),
+        Output("tabela-crm-pivot-container", "children"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -158,6 +215,7 @@ def registrar_callbacks(app):
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
+        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO)
 
         return (
             formatar_numero(kpis["disparado"]),
@@ -187,4 +245,5 @@ def registrar_callbacks(app):
             charts.grafico_funil_crm(crm_agregado),
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
+            _tabela_pivot_crm_component(colunas_pivot, linhas_pivot),
         )

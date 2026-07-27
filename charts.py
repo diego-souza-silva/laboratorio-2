@@ -27,6 +27,14 @@ NOME_CURTO_UTM = {
     "20260725-cadastradodia25-kolmeya": "Cadastrado",
 }
 
+GRUPO_AB_LABEL = {
+    "P1_MAXIMA": "P1 · Máxima",
+    "P2_ALTA": "P2 · Alta",
+    "P3_MEDIA": "P3 · Média",
+    "P4_BAIXA": "P4 · Baixa",
+    "Não Classificado": "Não Classificado",
+}
+
 
 def nome_curto(utm: str) -> str:
     return NOME_CURTO_UTM.get(utm, utm)

@@ -7,21 +7,13 @@ import dash_bootstrap_components as dbc
 from data_processing import (
     CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms, extremos_data_hora,
 )
-from charts import nome_curto
+from charts import GRUPO_AB_LABEL, nome_curto
 
 STATUS_LABEL = {
     "Entregue": "Entregue",
     "Pendente": "Pendente (em trânsito)",
     "Falhou": "Falhou",
     "Nao Processado": "Não Processado",
-}
-
-GRUPO_AB_LABEL = {
-    "P1_MAXIMA": "P1 · Máxima",
-    "P2_ALTA": "P2 · Alta",
-    "P3_MEDIA": "P3 · Média",
-    "P4_BAIXA": "P4 · Baixa",
-    "Não Classificado": "Não Classificado",
 }
 
 
@@ -214,7 +206,14 @@ def _aba_conversao_crm() -> html.Div:
         ], className="g-3 mb-3"),
         dbc.Row([
             dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=12),
-        ], className="g-3"),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Ação × Campanha × Grupo AB (detalhado)", className="mb-3"),
+                html.Div(id="tabela-crm-pivot-container"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
     ])
 
 

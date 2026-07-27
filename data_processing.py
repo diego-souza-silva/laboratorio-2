@@ -44,6 +44,12 @@ ETAPAS_CRM_LABEL = {
     "oferta": "Oferta Apresentada",
     "acordo": "Acordo Gerado",
 }
+ETAPAS_CRM_NUMERO = {
+    "home": "1º Home",
+    "auth": "2º Autenticação",
+    "oferta": "3º Oferta Apresentada",
+    "acordo": "4º Acordo Gerado",
+}
 
 ARQUIVO_GRUPO_AB = RAW_DIR / "base_segmentacao_grupo_ab.csv"
 NAO_CLASSIFICADO = "Não Classificado"
@@ -310,6 +316,61 @@ def agregar_crm_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
         lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
     )
     return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
+def montar_pivot_crm(df: pd.DataFrame, utms_ordem: list[str]) -> tuple[list[str], list[dict]]:
+    """Tabela dinâmica Ação (com subtotal) > Grupo AB, colunas = UTM + Total Geral,
+    igual ao pivot manual (Ação nas linhas, UTM nas colunas, grupo_ab como sub-nível)."""
+    if df.empty:
+        return [], []
+
+    utms_presentes = [u for u in utms_ordem if u in df["utm_campaign"].unique()]
+
+    def ordem_grupo(g):
+        return GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+
+    linhas = []
+    totais_coluna = {u: 0 for u in utms_presentes}
+    total_geral = 0
+
+    for etapa in ETAPAS_CRM:
+        sub = df[df["acao_norm"] == etapa]
+        if sub.empty:
+            continue
+
+        pivot = sub.pivot_table(
+            index="grupo_ab", columns="utm_campaign", values="acao_norm",
+            aggfunc="count", fill_value=0,
+        ).reindex(columns=utms_presentes, fill_value=0)
+
+        subtotal = pivot.sum(axis=0)
+        subtotal_geral = int(subtotal.sum())
+
+        linha_subtotal = {"rotulo": ETAPAS_CRM_NUMERO[etapa], "nivel": "subtotal"}
+        for u in utms_presentes:
+            linha_subtotal[u] = int(subtotal[u])
+            totais_coluna[u] += int(subtotal[u])
+        linha_subtotal["Total Geral"] = subtotal_geral
+        total_geral += subtotal_geral
+        linhas.append(linha_subtotal)
+
+        for grupo in sorted(pivot.index, key=ordem_grupo):
+            linha = {"rotulo": grupo, "nivel": "detalhe"}
+            total_linha = 0
+            for u in utms_presentes:
+                valor = int(pivot.loc[grupo, u])
+                linha[u] = valor
+                total_linha += valor
+            linha["Total Geral"] = total_linha
+            linhas.append(linha)
+
+    linha_total_geral = {"rotulo": "Total Geral", "nivel": "total_geral"}
+    for u in utms_presentes:
+        linha_total_geral[u] = totais_coluna[u]
+    linha_total_geral["Total Geral"] = total_geral
+    linhas.append(linha_total_geral)
+
+    return utms_presentes, linhas
 
 
 def extremos_data_hora(df: pd.DataFrame) -> tuple:
