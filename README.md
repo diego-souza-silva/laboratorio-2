@@ -20,21 +20,27 @@ O navegador abre automaticamente em `http://127.0.0.1:8051/`.
 - `layout.py` — layout Dash/Bootstrap (filtros, cards de KPI, abas, tabela).
 - `callbacks.py` — callback que liga os filtros a todos os componentes.
 - `utils.py` — parsing de datas em português, normalização de telefone, formatação.
-- `data/raw/` — pastas de origem, descritas abaixo.
+- `ARQUIVOS PARA DISPAROS/`, `ARQUIVOS DE RETORNO/`, `ARQUIVOS LOG/`, `ARQUIVO DA BASE INTEIRA/`
+  — pastas de dados na raiz do projeto (ao lado de `app.py`), descritas abaixo.
 
-## Atualização diária — onde colocar os arquivos novos
+## Rotina de atualização diária
 
-Tudo dentro de `data/raw/`, nas mesmas 3 pastas usadas na operação do dia a dia. Depois de
-copiar os arquivos, só reiniciar o app (`python app.py`) — nenhuma campanha nova exige
-editar código.
+1. Copie os arquivos novos do dia para dentro das pastas correspondentes (na raiz do
+   projeto, ex.: `C:\Users\diego.souza\FUNIL LABORATORIO\dashboardcasasbahia\ARQUIVOS PARA DISPAROS\`).
+   Não precisa apagar os arquivos de dias anteriores — o histórico acumula sozinho.
+2. Se o dashboard já estiver rodando, feche com `Ctrl+C` no terminal.
+3. Rode `python app.py` de novo. O navegador abre sozinho já com os dados atualizados.
 
-### `data/raw/ARQUIVOS PARA DISPAROS/`
+Nenhum passo exige editar código — campanhas novas, retornos novos e atualização da base
+de grupo_ab são todos descobertos automaticamente pelas 4 pastas abaixo.
+
+### `ARQUIVOS PARA DISPAROS/`
 Um arquivo por campanha (telefone;FRASE) = base enviada à plataforma = **Disparado**.
 O nome do arquivo (sem `.csv`) **é** a UTM da campanha — ex.:
 `20260728-abandonocarrinhodia28-kolmeya.csv`. Toda campanha nova aparece sozinha no
 filtro "Campanha (UTM)" assim que o arquivo é colocado aqui.
 
-### `data/raw/ARQUIVOS DE RETORNO/`
+### `ARQUIVOS DE RETORNO/`
 Retorno da Kolmeya, Otima ou outro canal (job;phone;status;mensagem;criacao) = confirmação
 de **Enviado/Entregue/Falhou**. Esses arquivos vêm nomeados por número de job
 (`export-full_...`), não pela UTM — por isso o app **liga cada retorno à campanha
@@ -44,13 +50,13 @@ precisa renomear nada, só soltar o arquivo original aqui. Se o disparo de hoje 
 tiver retorno (resultado ainda não voltou), a campanha aparece com tudo em "Não
 Processado" até o arquivo de retorno chegar.
 
-### `data/raw/ARQUIVOS LOG/`
+### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão
 Pós-SMS" — não participa do funil de envio/entrega. Todo `.csv` desta pasta é lido e
 concatenado (dá pra ir empilhando um export por dia); se tiver coluna `ID`, a deduplicação
 é automática por ela.
 
-### `data/raw/ARQUIVO DA BASE INTEIRA/`
+### `ARQUIVO DA BASE INTEIRA/`
 Base de clientes usada no cruzamento do grupo_ab (qualquer nome de arquivo `.csv`). É
 tratada como **snapshot**: se colocar uma versão nova, pode deixar a antiga ali também —
 a deduplicação por `CPF` é automática (mantendo a linha mais recente), então não precisa
@@ -70,12 +76,12 @@ incluída no dashboard.
 
 ## Segmentação por Grupo AB
 
-`data/raw/ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com
-colunas `FONE_1`..`FONE_4` e `grupo_ab`). Como os arquivos de SMS só têm telefone (não têm
-CPF), o cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4` são explodidas em
-formato longo e viram um mapa `telefone -> grupo_ab` (equivalente ao PROCX/VLOOKUP manual
-"doc por doc"), aplicado depois a cada evento de SMS e a cada linha do log de CRM.
-Telefones que não aparecem na base viram `Não Classificado`. Isso alimenta o filtro global
-"Grupo AB", a aba "Funil por Grupo AB" (volume, taxa de entrega e tabela executiva por
-`P1_MAXIMA`, `P2_ALTA`, `P3_MEDIA`, `P4_BAIXA`) e a tabela dinâmica Ação × Campanha ×
-Grupo AB na aba de Conversão Pós-SMS.
+`ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com colunas
+`FONE_1`..`FONE_4` e `grupo_ab`). Como os arquivos de SMS só têm telefone (não têm CPF), o
+cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4` são explodidas em formato
+longo e viram um mapa `telefone -> grupo_ab` (equivalente ao PROCX/VLOOKUP manual "doc por
+doc"), aplicado depois a cada evento de SMS e a cada linha do log de CRM. Telefones que não
+aparecem na base viram `Não Classificado`. Isso alimenta o filtro global "Grupo AB", a aba
+"Funil por Grupo AB" (volume, taxa de entrega e tabela executiva por `P1_MAXIMA`,
+`P2_ALTA`, `P3_MEDIA`, `P4_BAIXA`) e a tabela dinâmica Ação × Campanha × Grupo AB na aba de
+Conversão Pós-SMS.

@@ -1,6 +1,7 @@
 """Carga, limpeza e padronização dos dados de SMS da operação Casas Bahia.
 
-Fontes, todas em data/raw/ (nas mesmas pastas usadas pela operação no dia a dia):
+Fontes — 4 pastas na raiz do projeto, ao lado de app.py (as mesmas pastas usadas pela
+operação no dia a dia; basta soltar arquivo novo dentro e reiniciar o app):
   - `ARQUIVOS PARA DISPAROS/{utm}.csv` -> base enviada à plataforma (telefone;FRASE) =
     "Disparado". O nome do arquivo (sem extensão) é a própria UTM da campanha.
   - `ARQUIVOS DE RETORNO/*.csv` -> retorno da Kolmeya/Otima/etc (job;phone;status;
@@ -10,7 +11,7 @@ Fontes, todas em data/raw/ (nas mesmas pastas usadas pela operação no dia a di
   - `ARQUIVOS LOG/*.csv` -> log(s) de CRM (home/auth/oferta/acordo); todos os arquivos
     da pasta são concatenados. Usado só na aba de conversão pós-SMS, não participa do
     funil de envio/entrega.
-  - `base_segmentacao_grupo_ab.csv` -> snapshot da base de clientes p/ cruzamento do grupo_ab.
+  - `ARQUIVO DA BASE INTEIRA/*.csv` -> snapshot da base de clientes p/ cruzamento do grupo_ab.
 
 Cada telefone do arquivo de retorno sempre existe na base de disparo correspondente
 (validado empiricamente, sem duplicatas), então o funil é modelado como:
@@ -25,11 +26,11 @@ import pandas as pd
 
 from utils import normalizar_telefone, parse_data_pt_br, taxa
 
-RAW_DIR = Path(__file__).parent / "data" / "raw"
-DIR_DISPARO = RAW_DIR / "ARQUIVOS PARA DISPAROS"
-DIR_RETORNO = RAW_DIR / "ARQUIVOS DE RETORNO"
-DIR_LOG_CRM = RAW_DIR / "ARQUIVOS LOG"
-DIR_BASE_GRUPO_AB = RAW_DIR / "ARQUIVO DA BASE INTEIRA"
+RAIZ_PROJETO = Path(__file__).parent
+DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
+DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
+DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
+DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 
 LIMIAR_VINCULO_RETORNO = 0.8
 
