@@ -1,13 +1,19 @@
 """Carga, limpeza e padronização dos dados de SMS da operação Casas Bahia.
 
-Fontes (todas em data/raw/):
-  - `{utm}_disparo.csv`  -> base enviada à plataforma Kolmeya (telefone;FRASE) = "Disparado".
-  - `{utm}_log.csv`      -> log de resultado da Kolmeya (job;phone;status;mensagem;criacao).
-  - `LOG_CB_LABORATORIO_crm.csv` -> log de CRM (home/auth/oferta/acordo), usado só na aba de
-    conversão pós-SMS; não participa do funil de envio/entrega.
+Fontes, todas em data/raw/ (nas mesmas pastas usadas pela operação no dia a dia):
+  - `ARQUIVOS PARA DISPAROS/{utm}.csv` -> base enviada à plataforma (telefone;FRASE) =
+    "Disparado". O nome do arquivo (sem extensão) é a própria UTM da campanha.
+  - `ARQUIVOS DE RETORNO/*.csv` -> retorno da Kolmeya/Otima/etc (job;phone;status;
+    mensagem;criacao) = status de Enviado/Entregue/Falhou. Vêm nomeados por número de
+    job, não por UTM, então cada arquivo é ligado à campanha de disparo com maior
+    sobreposição de telefones (função `vincular_retornos_a_campanhas`).
+  - `ARQUIVOS LOG/*.csv` -> log(s) de CRM (home/auth/oferta/acordo); todos os arquivos
+    da pasta são concatenados. Usado só na aba de conversão pós-SMS, não participa do
+    funil de envio/entrega.
+  - `base_segmentacao_grupo_ab.csv` -> snapshot da base de clientes p/ cruzamento do grupo_ab.
 
-Cada telefone do log de resultado sempre existe na base de disparo (validado empiricamente,
-sem duplicatas), então o funil é modelado como:
+Cada telefone do arquivo de retorno sempre existe na base de disparo correspondente
+(validado empiricamente, sem duplicatas), então o funil é modelado como:
   Disparado (base) -> Enviado (qualquer status retornado pela operadora) -> Entregue / Falhou
   (subconjuntos de Enviado; "enviado" cru vira "Pendente", ainda sem confirmação).
 """
@@ -20,21 +26,60 @@ import pandas as pd
 from utils import normalizar_telefone, parse_data_pt_br, taxa
 
 RAW_DIR = Path(__file__).parent / "data" / "raw"
+DIR_DISPARO = RAW_DIR / "ARQUIVOS PARA DISPAROS"
+DIR_RETORNO = RAW_DIR / "ARQUIVOS DE RETORNO"
+DIR_LOG_CRM = RAW_DIR / "ARQUIVOS LOG"
+
+LIMIAR_VINCULO_RETORNO = 0.8
 
 
-def descobrir_campanhas() -> list[str]:
-    """Descobre automaticamente as campanhas em escopo a partir dos arquivos em data/raw/:
-    toda UTM que tiver o par `{utm}_disparo.csv` + `{utm}_log.csv` entra no dashboard.
-    Basta soltar os arquivos novos na pasta e reiniciar o app — não precisa editar código."""
-    campanhas = []
-    for disparo in sorted(RAW_DIR.glob("*_disparo.csv")):
-        utm = disparo.name[: -len("_disparo.csv")]
-        if (RAW_DIR / f"{utm}_log.csv").exists():
-            campanhas.append(utm)
-    return campanhas
+def descobrir_campanhas() -> dict[str, Path]:
+    """Descobre automaticamente as campanhas em escopo: toda arquivo em
+    `ARQUIVOS PARA DISPAROS/` vira uma campanha, usando o nome do arquivo (sem
+    extensão) como UTM. Basta soltar o arquivo novo na pasta e reiniciar o app —
+    não precisa editar código nem renomear nada."""
+    return {caminho.stem: caminho for caminho in sorted(DIR_DISPARO.glob("*.csv"))}
 
 
-CAMPANHAS_ESCOPO = descobrir_campanhas()
+def _telefones_do_arquivo(caminho: Path, coluna: str) -> set[str]:
+    df = ler_csv_auto(caminho)
+    if coluna not in df.columns:
+        return set()
+    telefones = {normalizar_telefone(v) for v in df[coluna]}
+    telefones.discard("")
+    return telefones
+
+
+def vincular_retornos_a_campanhas(
+    campanhas: dict[str, Path], limiar: float = LIMIAR_VINCULO_RETORNO
+) -> dict[str, Path]:
+    """Liga cada arquivo de `ARQUIVOS DE RETORNO/` (nomeado por job, não por UTM) à
+    campanha de disparo com maior fração de telefones em comum. Uma campanha sem
+    retorno ainda vinculado (ex.: disparo de hoje, resultado ainda não voltou) fica
+    sem entrada no dicionário — os eventos dela entram como "Não Processado"."""
+    telefones_disparo = {utm: _telefones_do_arquivo(caminho, "telefone") for utm, caminho in campanhas.items()}
+
+    vinculo: dict[str, Path] = {}
+    for retorno_path in sorted(DIR_RETORNO.glob("*.csv")):
+        telefones_retorno = _telefones_do_arquivo(retorno_path, "phone")
+        if not telefones_retorno:
+            continue
+
+        melhor_utm, melhor_taxa = None, 0.0
+        for utm, tel_disparo in telefones_disparo.items():
+            if not tel_disparo:
+                continue
+            sobreposicao = len(telefones_retorno & tel_disparo) / len(telefones_retorno)
+            if sobreposicao > melhor_taxa:
+                melhor_utm, melhor_taxa = utm, sobreposicao
+
+        if melhor_utm is not None and melhor_taxa >= limiar:
+            vinculo[melhor_utm] = retorno_path
+
+    return vinculo
+
+
+CAMPANHAS_ESCOPO = list(descobrir_campanhas().keys())
 
 STATUS_FUNIL_ORDEM = ["Entregue", "Pendente", "Falhou", "Nao Processado"]
 
@@ -96,21 +141,27 @@ def ler_csv_auto(caminho: Path) -> pd.DataFrame:
     return df
 
 
-def _carregar_campanha(utm: str) -> pd.DataFrame:
-    disparo = ler_csv_auto(RAW_DIR / f"{utm}_disparo.csv")
+def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) -> pd.DataFrame:
+    disparo = ler_csv_auto(disparo_path)
     disparo["telefone_norm"] = disparo["telefone"].apply(normalizar_telefone)
     disparo = disparo[disparo["telefone_norm"] != ""].drop_duplicates("telefone_norm")
 
-    log = ler_csv_auto(RAW_DIR / f"{utm}_log.csv")
-    log["telefone_norm"] = log["phone"].apply(normalizar_telefone)
-    log["status_raw"] = log["status"].str.strip().str.lower()
-    log["timestamp"] = pd.to_datetime(log["criacao"], errors="coerce")
-    log = log[log["telefone_norm"] != ""].drop_duplicates("telefone_norm")
+    if retorno_path is not None:
+        retorno = ler_csv_auto(retorno_path)
+        retorno["telefone_norm"] = retorno["phone"].apply(normalizar_telefone)
+        retorno["status_raw"] = retorno["status"].str.strip().str.lower()
+        retorno["timestamp"] = pd.to_datetime(retorno["criacao"], errors="coerce")
+        retorno = retorno[retorno["telefone_norm"] != ""].drop_duplicates("telefone_norm")
+        eventos = disparo[["telefone_norm"]].merge(
+            retorno[["telefone_norm", "status_raw", "timestamp", "mensagem"]],
+            on="telefone_norm", how="left",
+        )
+    else:
+        eventos = disparo[["telefone_norm"]].copy()
+        eventos["status_raw"] = None
+        eventos["timestamp"] = pd.NaT
+        eventos["mensagem"] = None
 
-    eventos = disparo[["telefone_norm"]].merge(
-        log[["telefone_norm", "status_raw", "timestamp", "mensagem"]],
-        on="telefone_norm", how="left",
-    )
     eventos["utm_campaign"] = utm
     eventos["status_raw"] = eventos["status_raw"].fillna("nao_processado")
     return eventos
@@ -137,11 +188,18 @@ def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
 
 
 def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega e unifica os eventos das 4 campanhas Kolmeya (processamento único, cacheado)."""
+    """Carrega e unifica os eventos de todas as campanhas descobertas em ARQUIVOS PARA
+    DISPAROS/, ligando cada uma ao seu arquivo de retorno por sobreposição de telefones
+    (processamento único, cacheado)."""
     if not forcar_reload and "sms" in _cache:
         return _cache["sms"]
 
-    df = pd.concat([_carregar_campanha(utm) for utm in CAMPANHAS_ESCOPO], ignore_index=True)
+    campanhas = descobrir_campanhas()
+    vinculos = vincular_retornos_a_campanhas(campanhas)
+    df = pd.concat(
+        [_carregar_campanha(utm, caminho, vinculos.get(utm)) for utm, caminho in campanhas.items()],
+        ignore_index=True,
+    )
     df["status_funil"] = df["status_raw"].map(_STATUS_MAPA).fillna("Outro")
     df["disparado"] = 1
     df["enviado"] = (df["status_raw"] != "nao_processado").astype(int)
@@ -168,11 +226,21 @@ def _normalizar_telefone_com_ddi(valor) -> str:
 
 
 def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o log de CRM (aba de conversão pós-SMS), filtrado às campanhas em escopo."""
+    """Carrega o(s) log(s) de CRM (aba de conversão pós-SMS) de ARQUIVOS LOG/ — todo
+    arquivo da pasta é lido e concatenado, deduplicado por `id` quando a coluna existe
+    (permite ir empilhando um export novo por dia sem duplicar linhas repetidas)."""
     if not forcar_reload and "crm" in _cache:
         return _cache["crm"]
 
-    df = ler_csv_auto(RAW_DIR / "LOG_CB_LABORATORIO_crm.csv")
+    arquivos = sorted(DIR_LOG_CRM.glob("*.csv"))
+    partes = [ler_csv_auto(caminho) for caminho in arquivos]
+    df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
+    if df.empty:
+        _cache["crm"] = df
+        return df
+    if "id" in df.columns:
+        df = df.drop_duplicates("id")
+
     coluna_utm = "utm campaign" if "utm campaign" in df.columns else "utm"
     df = df[df[coluna_utm].isin(CAMPANHAS_ESCOPO)].copy()
     df = df.rename(columns={coluna_utm: "utm_campaign"})
