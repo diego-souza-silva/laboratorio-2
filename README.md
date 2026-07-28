@@ -35,20 +35,29 @@ Nenhum passo exige editar código — campanhas novas, retornos novos e atualiza
 de grupo_ab são todos descobertos automaticamente pelas 4 pastas abaixo.
 
 ### `ARQUIVOS PARA DISPAROS/`
-Um arquivo por campanha (telefone;FRASE) = base enviada à plataforma = **Disparado**.
-O nome do arquivo (sem `.csv`) **é** a UTM da campanha — ex.:
-`20260728-abandonocarrinhodia28-kolmeya.csv`. Toda campanha nova aparece sozinha no
-filtro "Campanha (UTM)" assim que o arquivo é colocado aqui.
+Um arquivo por campanha = base enviada à plataforma = **Disparado**. O nome do arquivo
+(sem `.csv`) **é** a UTM da campanha — ex.: `20260728-abandonocarrinhodia28-kolmeya.csv`.
+Toda campanha nova aparece sozinha no filtro "Campanha (UTM)" assim que o arquivo é
+colocado aqui, para qualquer canal:
+
+- **SMS/WhatsApp** (Kolmeya, Airys, Otima): identificador é a coluna `telefone`.
+- **E-mail** (Salesforce): identificador é a coluna `email` (não precisa de `telefone`).
+
+Se o arquivo já trouxer uma coluna `grupo_ab` (caso de Airys/Otima/Salesforce), ela é
+usada diretamente em vez de recalcular pelo cruzamento de telefone com
+`ARQUIVO DA BASE INTEIRA/`.
 
 ### `ARQUIVOS DE RETORNO/`
-Retorno da Kolmeya, Otima ou outro canal (job;phone;status;mensagem;criacao) = confirmação
-de **Enviado/Entregue/Falhou**. Esses arquivos vêm nomeados por número de job
+Retorno da Kolmeya ou outro canal por **telefone** (job;phone;status;mensagem;criacao) =
+confirmação de **Enviado/Entregue/Falhou**. Esses arquivos vêm nomeados por número de job
 (`export-full_...`), não pela UTM — por isso o app **liga cada retorno à campanha
 automaticamente**, comparando os telefones do retorno com os telefones de cada arquivo de
 `ARQUIVOS PARA DISPAROS/` e escolhendo a campanha com maior sobreposição (≥ 80%). Não
 precisa renomear nada, só soltar o arquivo original aqui. Se o disparo de hoje ainda não
 tiver retorno (resultado ainda não voltou), a campanha aparece com tudo em "Não
-Processado" até o arquivo de retorno chegar.
+Processado" até o arquivo de retorno chegar — isso vale também para campanhas de
+WhatsApp/e-mail cujo retorno ainda não foi enviado (o vínculo automático hoje só cobre
+retorno por telefone; retorno por e-mail ainda não é suportado).
 
 ### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão

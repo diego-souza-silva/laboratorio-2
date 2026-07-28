@@ -29,7 +29,8 @@ NOME_LEGIVEL_SLUG = {
     "cadastrado": "Cadastrado",
 }
 
-_PADRAO_UTM = re.compile(r"^\d{4}(\d{2})(\d{2})-(.+?)dia\d+-\w+$", re.IGNORECASE)
+_PADRAO_UTM_DIA = re.compile(r"^\d{4}(\d{2})(\d{2})-(.+?)dia\d+-\w+$", re.IGNORECASE)
+_PADRAO_UTM_SIMPLES = re.compile(r"^\d{4}(\d{2})(\d{2})-(.+)-(\w+)$", re.IGNORECASE)
 
 GRUPO_AB_LABEL = {
     "P1_MAXIMA": "P1 · Máxima",
@@ -42,14 +43,22 @@ GRUPO_AB_LABEL = {
 
 def nome_curto(utm: str) -> str:
     """Rótulo legível para uma UTM. Reconhece o padrão AAAAMMDD-{slug}diaDD-{plataforma}
-    (independente da data), então novas campanhas diárias já saem com nome bonito
-    sem precisar editar código — só a data muda no rótulo."""
-    match = _PADRAO_UTM.match(utm)
-    if not match:
-        return utm
-    mes, dia, slug = match.groups()
-    rotulo = NOME_LEGIVEL_SLUG.get(slug.lower(), slug)
-    return f"{rotulo} ({dia}/{mes})"
+    e, como fallback, AAAAMMDD-{slug}-{plataforma} (independente da data), então novas
+    campanhas diárias de qualquer canal já saem com nome bonito sem precisar editar
+    código — só a data muda no rótulo."""
+    match_dia = _PADRAO_UTM_DIA.match(utm)
+    if match_dia:
+        mes, dia, slug = match_dia.groups()
+        rotulo = NOME_LEGIVEL_SLUG.get(slug.lower(), slug)
+        return f"{rotulo} ({dia}/{mes})"
+
+    match_simples = _PADRAO_UTM_SIMPLES.match(utm)
+    if match_simples:
+        mes, dia, slug, plataforma = match_simples.groups()
+        rotulo = NOME_LEGIVEL_SLUG.get(slug.lower(), slug)
+        return f"{rotulo} ({dia}/{mes}, {plataforma})"
+
+    return utm
 
 
 def _layout_base(fig: go.Figure, titulo: str | None = None, altura: int = 340) -> go.Figure:

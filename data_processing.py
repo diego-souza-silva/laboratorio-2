@@ -144,26 +144,60 @@ def ler_csv_auto(caminho: Path) -> pd.DataFrame:
     return df
 
 
-def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) -> pd.DataFrame:
-    disparo = ler_csv_auto(disparo_path)
-    disparo["telefone_norm"] = disparo["telefone"].apply(normalizar_telefone)
-    disparo = disparo[disparo["telefone_norm"] != ""].drop_duplicates("telefone_norm")
+def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Identifica se o disparo é por telefone (SMS/WhatsApp) ou por e-mail (ex.:
+    Salesforce), normaliza o identificador e remove duplicatas. Retorna o tipo
+    ("telefone"/"email") para decidir depois como tentar ligar o retorno."""
+    disparo = disparo.copy()
+    if "telefone" in disparo.columns:
+        disparo["identificador_norm"] = disparo["telefone"].apply(normalizar_telefone)
+        tipo = "telefone"
+    elif "email" in disparo.columns:
+        disparo["identificador_norm"] = disparo["email"].fillna("").str.strip().str.lower()
+        tipo = "email"
+    else:
+        disparo["identificador_norm"] = ""
+        tipo = "desconhecido"
 
-    if retorno_path is not None:
+    disparo["telefone_norm"] = disparo["identificador_norm"] if tipo == "telefone" else ""
+    disparo = disparo[disparo["identificador_norm"] != ""].drop_duplicates("identificador_norm")
+    return disparo, tipo
+
+
+def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) -> pd.DataFrame:
+    disparo_bruto = ler_csv_auto(disparo_path)
+    disparo, tipo_identificador = _preparar_disparo(disparo_bruto)
+
+    # Alguns disparos (Airys/Otima/Salesforce) já vêm com grupo_ab embutido na própria
+    # base — mais confiável do que recalcular pelo cruzamento de telefone, então tem
+    # prioridade sobre o mapa da base de segmentação.
+    grupo_ab_arquivo = None
+    if "grupo_ab" in disparo.columns:
+        grupo_ab_arquivo = disparo[["identificador_norm", "grupo_ab"]].rename(
+            columns={"grupo_ab": "grupo_ab_arquivo"}
+        )
+        grupo_ab_arquivo["grupo_ab_arquivo"] = grupo_ab_arquivo["grupo_ab_arquivo"].str.upper()
+
+    if retorno_path is not None and tipo_identificador == "telefone":
         retorno = ler_csv_auto(retorno_path)
         retorno["telefone_norm"] = retorno["phone"].apply(normalizar_telefone)
         retorno["status_raw"] = retorno["status"].str.strip().str.lower()
         retorno["timestamp"] = pd.to_datetime(retorno["criacao"], errors="coerce")
         retorno = retorno[retorno["telefone_norm"] != ""].drop_duplicates("telefone_norm")
-        eventos = disparo[["telefone_norm"]].merge(
+        eventos = disparo[["identificador_norm", "telefone_norm"]].merge(
             retorno[["telefone_norm", "status_raw", "timestamp", "mensagem"]],
             on="telefone_norm", how="left",
         )
     else:
-        eventos = disparo[["telefone_norm"]].copy()
+        eventos = disparo[["identificador_norm", "telefone_norm"]].copy()
         eventos["status_raw"] = None
         eventos["timestamp"] = pd.NaT
         eventos["mensagem"] = None
+
+    if grupo_ab_arquivo is not None:
+        eventos = eventos.merge(grupo_ab_arquivo, on="identificador_norm", how="left")
+    else:
+        eventos["grupo_ab_arquivo"] = None
 
     eventos["utm_campaign"] = utm
     eventos["status_raw"] = eventos["status_raw"].fillna("nao_processado")
@@ -222,7 +256,9 @@ def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     df["hora"] = df["timestamp"].dt.hour
 
     mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
-    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
+    grupo_ab_telefone = df["telefone_norm"].map(mapa_grupo_ab)
+    df["grupo_ab"] = df["grupo_ab_arquivo"].combine_first(grupo_ab_telefone).fillna(NAO_CLASSIFICADO)
+    df = df.drop(columns="grupo_ab_arquivo")
 
     _cache["sms"] = df
     return df
