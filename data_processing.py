@@ -109,6 +109,8 @@ ETAPAS_CRM_NUMERO = {
 NAO_CLASSIFICADO = "Não Classificado"
 GRUPO_AB_ORDEM = ["P1_MAXIMA", "P2_ALTA", "P3_MEDIA", "P4_BAIXA", NAO_CLASSIFICADO]
 
+UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "email"]
+
 _cache: dict[str, pd.DataFrame] = {}
 
 
@@ -237,8 +239,14 @@ def _normalizar_telefone_com_ddi(valor) -> str:
 
 def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o(s) log(s) de CRM (aba de conversão pós-SMS) de ARQUIVOS LOG/ — todo
-    arquivo da pasta é lido e concatenado, deduplicado por `id` quando a coluna existe
-    (permite ir empilhando um export novo por dia sem duplicar linhas repetidas)."""
+    arquivo da pasta é lido e concatenado. Diferente do funil de SMS, aqui NÃO se
+    restringe às campanhas de ARQUIVOS PARA DISPAROS/: o log de CRM cobre todos os
+    canais (SMS, WhatsApp, e-mail) e campanhas que a operação for adicionando dia a
+    dia, então a aba filtra por UTM/Canal (utm_medium) próprios, dinâmicos. Deduplica
+    por `id` quando a coluna existe; exports sem `id` (formato mais novo) são
+    deduplicados por uma chave composta (doc + utm campaign + acao + data), já que
+    representam o mesmo evento de negociação — evita contar a mesma ação em dobro
+    quando um export mais novo se sobrepõe a um mais antigo na pasta."""
     if not forcar_reload and "crm" in _cache:
         return _cache["crm"]
 
@@ -248,15 +256,21 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     if df.empty:
         _cache["crm"] = df
         return df
-    if "id" in df.columns:
-        df = df.drop_duplicates("id")
+
+    # Chave composta (não usa `id`: exports mais antigos e mais novos têm esquemas
+    # diferentes, e misturar `id` com linhas sem essa coluna faz o pandas tratar todo
+    # NaN como duplicata entre si, descartando quase tudo do arquivo sem `id`).
+    chave = [c for c in ["doc", "utm campaign", "acao", "data"] if c in df.columns]
+    if chave:
+        df = df.drop_duplicates(chave)
 
     coluna_utm = "utm campaign" if "utm campaign" in df.columns else "utm"
-    df = df[df[coluna_utm].isin(CAMPANHAS_ESCOPO)].copy()
+    df = df.dropna(subset=[coluna_utm]).copy()
     df = df.rename(columns={coluna_utm: "utm_campaign"})
     df["timestamp"] = df["data"].apply(parse_data_pt_br)
     df["acao_norm"] = df["acao"].str.strip().str.lower()
     df = df[df["acao_norm"].isin(ETAPAS_CRM)]
+    df["utm_medium"] = df["utm medium"].fillna("").str.strip().str.lower() if "utm medium" in df.columns else ""
 
     mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
@@ -400,6 +414,16 @@ def agregar_crm_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
     tabela = _agregar_crm_por(df, "grupo_ab")
     tabela["ordem"] = tabela["grupo_ab"].apply(
         lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+    )
+    return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
+def agregar_crm_por_medium(df: pd.DataFrame) -> pd.DataFrame:
+    """Conta ações de CRM (home/auth/oferta/acordo) por canal de origem (utm_medium:
+    whatsapp/sms/email), na ordem de volume esperado."""
+    tabela = _agregar_crm_por(df, "utm_medium")
+    tabela["ordem"] = tabela["utm_medium"].apply(
+        lambda m: UTM_MEDIUM_ORDEM.index(m) if m in UTM_MEDIUM_ORDEM else len(UTM_MEDIUM_ORDEM)
     )
     return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 

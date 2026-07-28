@@ -302,6 +302,25 @@ def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Ações de CRM por Grupo AB")
 
 
+MEDIUM_LABEL_CHART = {"whatsapp": "WhatsApp", "sms": "SMS", "email": "E-mail"}
+
+
+def grafico_crm_por_medium(crm_agregado: pd.DataFrame) -> go.Figure:
+    if crm_agregado.empty:
+        return _layout_base(go.Figure(), "Conversão por Canal (sem dados no período)")
+
+    rotulos = [MEDIUM_LABEL_CHART.get(m, m) for m in crm_agregado["utm_medium"]]
+    fig = go.Figure()
+    cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+    for etapa in ETAPAS_CRM:
+        fig.add_trace(go.Bar(
+            x=rotulos, y=crm_agregado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+            marker_color=cores_etapa[etapa],
+        ))
+    fig.update_layout(barmode="group")
+    return _layout_base(fig, "Ações de CRM por Canal")
+
+
 def formatar_tabela_executiva(agregado: pd.DataFrame) -> list[dict]:
     registros = []
     for _, linha in agregado.iterrows():

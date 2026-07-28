@@ -6,9 +6,9 @@ from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_por_campanha,
-    agregar_por_grupo_ab, calcular_funil, calcular_kpis, carregar_dados_crm,
-    carregar_dados_sms, filtrar_dados, montar_pivot_crm,
+    agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_crm_por_medium,
+    agregar_por_campanha, agregar_por_grupo_ab, calcular_funil, calcular_kpis,
+    carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -168,6 +168,7 @@ def registrar_callbacks(app):
         Output("kpi-crm-oferta", "children"),
         Output("kpi-crm-acordo", "children"),
         Output("grafico-funil-crm", "figure"),
+        Output("grafico-crm-medium", "figure"),
         Output("grafico-crm-campanha", "figure"),
         Output("grafico-crm-grupo-ab", "figure"),
         Output("tabela-crm-pivot-container", "children"),
@@ -177,8 +178,12 @@ def registrar_callbacks(app):
         Input("filtro-hora", "value"),
         Input("filtro-status", "value"),
         Input("filtro-grupo-ab", "value"),
+        Input("filtro-utm-crm", "value"),
+        Input("filtro-medium-crm", "value"),
     )
-    def atualizar_dashboard(utms, data_ini, data_fim, faixa_hora, status, grupos_ab):
+    def atualizar_dashboard(
+        utms, data_ini, data_fim, faixa_hora, status, grupos_ab, utms_crm, mediums_crm,
+    ):
         df_completo = carregar_dados_sms()
 
         data_ini_dt = pd.to_datetime(data_ini).date() if data_ini else None
@@ -204,18 +209,24 @@ def registrar_callbacks(app):
 
         crm_completo = carregar_dados_crm()
         crm_filtrado = crm_completo
-        if utms:
-            crm_filtrado = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms)]
+        if utms_crm:
+            crm_filtrado = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm)]
+        if mediums_crm:
+            crm_filtrado = crm_filtrado[crm_filtrado["utm_medium"].isin(mediums_crm)]
         if grupos_ab:
             crm_filtrado = crm_filtrado[crm_filtrado["grupo_ab"].isin(grupos_ab)]
         crm_agregado = agregar_crm_por_campanha(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         crm_agregado_grupo_ab = (
             agregar_crm_por_grupo_ab(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         )
+        crm_agregado_medium = (
+            agregar_crm_por_medium(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
+        )
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
-        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO)
+        ordem_utms_crm = sorted(crm_completo["utm_campaign"].unique()) if not crm_completo.empty else []
+        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, ordem_utms_crm)
 
         return (
             formatar_numero(kpis["disparado"]),
@@ -243,6 +254,7 @@ def registrar_callbacks(app):
             formatar_numero(totais_crm["oferta"]),
             formatar_numero(totais_crm["acordo"]),
             charts.grafico_funil_crm(crm_agregado),
+            charts.grafico_crm_por_medium(crm_agregado_medium),
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
             _tabela_pivot_crm_component(colunas_pivot, linhas_pivot),

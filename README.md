@@ -53,8 +53,11 @@ Processado" até o arquivo de retorno chegar.
 ### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão
 Pós-SMS" — não participa do funil de envio/entrega. Todo `.csv` desta pasta é lido e
-concatenado (dá pra ir empilhando um export por dia); se tiver coluna `ID`, a deduplicação
-é automática por ela.
+concatenado (dá pra ir empilhando um export por dia), deduplicado por uma chave composta
+(doc + campanha + ação + data) já que exports diferentes podem ter esquema de colunas
+diferente. **Essa aba não fica restrita às 4 campanhas de SMS**: mostra todas as
+campanhas/canais que aparecerem no log (SMS, WhatsApp, e-mail — Kolmeya, Otima, Airys,
+Salesforce etc.), com filtro próprio de UTM e de Canal (coluna `Utm Medium`).
 
 ### `ARQUIVO DA BASE INTEIRA/`
 Base de clientes usada no cruzamento do grupo_ab (qualquer nome de arquivo `.csv`). É
