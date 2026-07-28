@@ -130,6 +130,23 @@ body {
   border-bottom-color: var(--azul);
 }
 
+.editor-diario {
+  background-color: #101623;
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 14px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.editor-diario:focus {
+  outline: none;
+  border-color: var(--azul);
+}
+
 /* dcc.Dropdown em tema escuro */
 .dash-dropdown-escuro .Select-control,
 .dash-dropdown-escuro .select-control,

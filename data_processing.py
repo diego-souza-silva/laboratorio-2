@@ -31,6 +31,7 @@ DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
 DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
+ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
 
 LIMIAR_VINCULO_RETORNO = 0.8
 
@@ -523,3 +524,16 @@ def extremos_data_hora(df: pd.DataFrame) -> tuple:
         hoje = pd.Timestamp.now().date()
         return hoje, hoje, 0, 23
     return validas["data"].min(), validas["data"].max(), 0, 23
+
+
+def ler_diario_estrategia() -> str:
+    """Lê o diário de estratégia (arquivo Markdown editável direto pela aba do
+    dashboard). Se o arquivo ainda não existir, retorna um texto inicial vazio."""
+    if ARQUIVO_DIARIO_ESTRATEGIA.exists():
+        return ARQUIVO_DIARIO_ESTRATEGIA.read_text(encoding="utf-8")
+    return "# Diário de Estratégia\n\n"
+
+
+def salvar_diario_estrategia(conteudo: str) -> None:
+    """Grava o texto editado na aba do dashboard de volta em DIARIO_ESTRATEGIA.md."""
+    ARQUIVO_DIARIO_ESTRATEGIA.write_text(conteudo or "", encoding="utf-8")

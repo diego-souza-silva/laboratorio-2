@@ -22,6 +22,8 @@ O navegador abre automaticamente em `http://127.0.0.1:8051/`.
 - `utils.py` — parsing de datas em português, normalização de telefone, formatação.
 - `ARQUIVOS PARA DISPAROS/`, `ARQUIVOS DE RETORNO/`, `ARQUIVOS LOG/`, `ARQUIVO DA BASE INTEIRA/`
   — pastas de dados na raiz do projeto (ao lado de `app.py`), descritas abaixo.
+- `DIARIO_ESTRATEGIA.md` — bloco de notas com o histórico de decisões/estratégia por dia,
+  editável direto na aba "Diário / Estratégia" do dashboard (botão "Salvar" grava aqui).
 
 ## Rotina de atualização diária
 

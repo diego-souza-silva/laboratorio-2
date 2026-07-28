@@ -5,7 +5,8 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms, extremos_data_hora,
+    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms,
+    extremos_data_hora, ler_diario_estrategia,
 )
 from charts import GRUPO_AB_LABEL, nome_curto
 
@@ -121,7 +122,7 @@ def _grafico_card(titulo: str, id_grafico: str, altura: str = "360px") -> dbc.Ca
 def _aba_funil_sms() -> html.Div:
     return html.Div([
         dbc.Row([
-            dbc.Col(_grafico_card("Funil de SMS", "grafico-funil"), md=7),
+            dbc.Col(_grafico_card("Funil Geral", "grafico-funil"), md=7),
             dbc.Col(
                 dbc.Card(
                     dbc.CardBody([
@@ -240,6 +241,36 @@ def _aba_conversao_crm() -> html.Div:
     ])
 
 
+def _aba_diario() -> html.Div:
+    return html.Div([
+        dbc.Alert(
+            [
+                html.I(className="bi bi-journal-text me-2"),
+                "Bloco de notas livre para registrar a estratégia e as decisões de cada "
+                "dia. Escreva à vontade e clique em \"Salvar\" — o texto fica gravado em "
+                "DIARIO_ESTRATEGIA.md, na pasta do projeto, e continua aqui mesmo depois "
+                "de reiniciar o dashboard.",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Card(
+            dbc.CardBody([
+                dcc.Textarea(
+                    id="editor-diario",
+                    value=ler_diario_estrategia(),
+                    className="editor-diario",
+                    style={"width": "100%", "height": "560px"},
+                ),
+                html.Div([
+                    dbc.Button("Salvar", id="btn-salvar-diario", color="primary", className="mt-3"),
+                    html.Span(id="status-salvar-diario", className="legenda-registros ms-3"),
+                ], className="d-flex align-items-center"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
+    ])
+
+
 def criar_layout() -> html.Div:
     return dbc.Container(
         [
@@ -258,17 +289,20 @@ def criar_layout() -> html.Div:
             _linha_kpis(),
 
             html.Div([
-                html.Button("Funil de SMS", id="btn-tab-sms", n_clicks=0,
+                html.Button("Funil Geral", id="btn-tab-sms", n_clicks=0,
                             className="aba-botao aba-ativa"),
                 html.Button("Funil por Grupo AB", id="btn-tab-grupo", n_clicks=0,
                             className="aba-botao"),
                 html.Button("Conversão Pós-Contato (CRM)", id="btn-tab-crm", n_clicks=0,
+                            className="aba-botao"),
+                html.Button("Diário / Estratégia", id="btn-tab-diario", n_clicks=0,
                             className="aba-botao"),
             ], className="barra-abas"),
 
             html.Div(_aba_funil_sms(), id="painel-tab-sms"),
             html.Div(_aba_grupo_ab(), id="painel-tab-grupo", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
+            html.Div(_aba_diario(), id="painel-tab-diario", style={"display": "none"}),
             dcc.Store(id="canal-crm-ativo", data="sms"),
         ],
         fluid=True,

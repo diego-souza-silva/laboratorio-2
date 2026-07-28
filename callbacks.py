@@ -1,18 +1,21 @@
 """Callback único que liga os filtros globais a KPIs, funil, gráficos e tabelas."""
 from __future__ import annotations
 
+import datetime as dt
+
 import pandas as pd
-from dash import Input, Output, ctx, dash_table, html
+from dash import Input, Output, State, ctx, dash_table, html
 
 import charts
 from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_por_campanha, agregar_por_grupo_ab, calcular_funil, calcular_kpis,
     carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
+    salvar_diario_estrategia,
 )
+from utils import formatar_numero, formatar_percentual
 
 CANAL_LABEL_FUNIL = {"sms": "Pós-SMS", "whatsapp": "Pós-WhatsApp", "email": "Pós-Email"}
-from utils import formatar_numero, formatar_percentual
 
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
@@ -128,21 +131,37 @@ def registrar_callbacks(app):
         Output("painel-tab-sms", "style"),
         Output("painel-tab-grupo", "style"),
         Output("painel-tab-crm", "style"),
+        Output("painel-tab-diario", "style"),
         Output("btn-tab-sms", "className"),
         Output("btn-tab-grupo", "className"),
         Output("btn-tab-crm", "className"),
+        Output("btn-tab-diario", "className"),
         Input("btn-tab-sms", "n_clicks"),
         Input("btn-tab-grupo", "n_clicks"),
         Input("btn-tab-crm", "n_clicks"),
+        Input("btn-tab-diario", "n_clicks"),
     )
-    def alternar_aba(_n_sms, _n_grupo, _n_crm):
+    def alternar_aba(_n_sms, _n_grupo, _n_crm, _n_diario):
         oculto, visivel = {"display": "none"}, {"display": "block"}
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         if ctx.triggered_id == "btn-tab-grupo":
-            return oculto, visivel, oculto, inativo, ativo, inativo
+            return oculto, visivel, oculto, oculto, inativo, ativo, inativo, inativo
         if ctx.triggered_id == "btn-tab-crm":
-            return oculto, oculto, visivel, inativo, inativo, ativo
-        return visivel, oculto, oculto, ativo, inativo, inativo
+            return oculto, oculto, visivel, oculto, inativo, inativo, ativo, inativo
+        if ctx.triggered_id == "btn-tab-diario":
+            return oculto, oculto, oculto, visivel, inativo, inativo, inativo, ativo
+        return visivel, oculto, oculto, oculto, ativo, inativo, inativo, inativo
+
+    @app.callback(
+        Output("status-salvar-diario", "children"),
+        Input("btn-salvar-diario", "n_clicks"),
+        State("editor-diario", "value"),
+        prevent_initial_call=True,
+    )
+    def salvar_diario(_n_clicks, conteudo):
+        salvar_diario_estrategia(conteudo)
+        agora = dt.datetime.now().strftime("%H:%M:%S")
+        return f"Salvo às {agora}"
 
     @app.callback(
         Output("canal-crm-ativo", "data"),
