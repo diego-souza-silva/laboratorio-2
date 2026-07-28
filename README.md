@@ -61,12 +61,13 @@ retorno por telefone; retorno por e-mail ainda não é suportado).
 
 ### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão
-Pós-SMS" — não participa do funil de envio/entrega. Todo `.csv` desta pasta é lido e
+Pós-Contato" — não participa do funil de envio/entrega. Todo `.csv` desta pasta é lido e
 concatenado (dá pra ir empilhando um export por dia), deduplicado por uma chave composta
 (doc + campanha + ação + data) já que exports diferentes podem ter esquema de colunas
-diferente. **Essa aba não fica restrita às 4 campanhas de SMS**: mostra todas as
-campanhas/canais que aparecerem no log (SMS, WhatsApp, e-mail — Kolmeya, Otima, Airys,
-Salesforce etc.), com filtro próprio de UTM e de Canal (coluna `Utm Medium`).
+diferente. A aba é **restrita às campanhas cadastradas em `ARQUIVOS PARA DISPAROS/`**
+(o log em si traz dezenas de outras campanhas de teste/outras operações, que ficam de
+fora) e tem 3 sub-abas fixas — Pós-SMS / Pós-WhatsApp / Pós-Email — definidas pela coluna
+`Utm Medium` de cada linha do log.
 
 ### `ARQUIVO DA BASE INTEIRA/`
 Base de clientes usada no cruzamento do grupo_ab (qualquer nome de arquivo `.csv`). É
@@ -96,4 +97,4 @@ doc"), aplicado depois a cada evento de SMS e a cada linha do log de CRM. Telefo
 aparecem na base viram `Não Classificado`. Isso alimenta o filtro global "Grupo AB", a aba
 "Funil por Grupo AB" (volume, taxa de entrega e tabela executiva por `P1_MAXIMA`,
 `P2_ALTA`, `P3_MEDIA`, `P4_BAIXA`) e a tabela dinâmica Ação × Campanha × Grupo AB na aba de
-Conversão Pós-SMS.
+Conversão Pós-Contato.

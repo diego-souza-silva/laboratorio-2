@@ -274,15 +274,13 @@ def _normalizar_telefone_com_ddi(valor) -> str:
 
 
 def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o(s) log(s) de CRM (aba de conversão pós-SMS) de ARQUIVOS LOG/ — todo
-    arquivo da pasta é lido e concatenado. Diferente do funil de SMS, aqui NÃO se
-    restringe às campanhas de ARQUIVOS PARA DISPAROS/: o log de CRM cobre todos os
-    canais (SMS, WhatsApp, e-mail) e campanhas que a operação for adicionando dia a
-    dia, então a aba filtra por UTM/Canal (utm_medium) próprios, dinâmicos. Deduplica
-    por `id` quando a coluna existe; exports sem `id` (formato mais novo) são
-    deduplicados por uma chave composta (doc + utm campaign + acao + data), já que
-    representam o mesmo evento de negociação — evita contar a mesma ação em dobro
-    quando um export mais novo se sobrepõe a um mais antigo na pasta."""
+    """Carrega o(s) log(s) de CRM (aba de conversão pós-contato) de ARQUIVOS LOG/ — todo
+    arquivo da pasta é lido e concatenado, e filtrado às campanhas cadastradas em
+    ARQUIVOS PARA DISPAROS/ (CAMPANHAS_ESCOPO) — o log em si cobre dezenas de campanhas
+    de teste/outras operações que não interessam aqui. Deduplica por uma chave composta
+    (doc + utm campaign + acao + data), já que exports diferentes podem ter esquema de
+    colunas diferente (misturar deduplicação por `id` com linhas sem essa coluna faz o
+    pandas tratar todo NaN como duplicata entre si, descartando quase tudo)."""
     if not forcar_reload and "crm" in _cache:
         return _cache["crm"]
 
@@ -301,7 +299,7 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
         df = df.drop_duplicates(chave)
 
     coluna_utm = "utm campaign" if "utm campaign" in df.columns else "utm"
-    df = df.dropna(subset=[coluna_utm]).copy()
+    df = df[df[coluna_utm].isin(CAMPANHAS_ESCOPO)].copy()
     df = df.rename(columns={coluna_utm: "utm_campaign"})
     df["timestamp"] = df["data"].apply(parse_data_pt_br)
     df["acao_norm"] = df["acao"].str.strip().str.lower()

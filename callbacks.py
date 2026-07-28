@@ -6,10 +6,12 @@ from dash import Input, Output, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    agregar_crm_por_campanha, agregar_crm_por_grupo_ab, agregar_crm_por_medium,
+    CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_por_campanha, agregar_por_grupo_ab, calcular_funil, calcular_kpis,
     carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
 )
+
+CANAL_LABEL_FUNIL = {"sms": "Pós-SMS", "whatsapp": "Pós-WhatsApp", "email": "Pós-Email"}
 from utils import formatar_numero, formatar_percentual
 
 COLUNAS_TABELA_EXECUTIVA = [
@@ -143,6 +145,23 @@ def registrar_callbacks(app):
         return visivel, oculto, oculto, ativo, inativo, inativo
 
     @app.callback(
+        Output("canal-crm-ativo", "data"),
+        Output("btn-canal-sms", "className"),
+        Output("btn-canal-whatsapp", "className"),
+        Output("btn-canal-email", "className"),
+        Input("btn-canal-sms", "n_clicks"),
+        Input("btn-canal-whatsapp", "n_clicks"),
+        Input("btn-canal-email", "n_clicks"),
+    )
+    def alternar_canal_crm(_n_sms, _n_whatsapp, _n_email):
+        inativo, ativo = "aba-botao", "aba-botao aba-ativa"
+        if ctx.triggered_id == "btn-canal-whatsapp":
+            return "whatsapp", inativo, ativo, inativo
+        if ctx.triggered_id == "btn-canal-email":
+            return "email", inativo, inativo, ativo
+        return "sms", ativo, inativo, inativo
+
+    @app.callback(
         Output("kpi-disparado", "children"),
         Output("kpi-enviado", "children"),
         Output("kpi-entregue", "children"),
@@ -168,7 +187,6 @@ def registrar_callbacks(app):
         Output("kpi-crm-oferta", "children"),
         Output("kpi-crm-acordo", "children"),
         Output("grafico-funil-crm", "figure"),
-        Output("grafico-crm-medium", "figure"),
         Output("grafico-crm-campanha", "figure"),
         Output("grafico-crm-grupo-ab", "figure"),
         Output("tabela-crm-pivot-container", "children"),
@@ -179,10 +197,10 @@ def registrar_callbacks(app):
         Input("filtro-status", "value"),
         Input("filtro-grupo-ab", "value"),
         Input("filtro-utm-crm", "value"),
-        Input("filtro-medium-crm", "value"),
+        Input("canal-crm-ativo", "data"),
     )
     def atualizar_dashboard(
-        utms, data_ini, data_fim, faixa_hora, status, grupos_ab, utms_crm, mediums_crm,
+        utms, data_ini, data_fim, faixa_hora, status, grupos_ab, utms_crm, canal_crm,
     ):
         df_completo = carregar_dados_sms()
 
@@ -208,25 +226,20 @@ def registrar_callbacks(app):
         )
 
         crm_completo = carregar_dados_crm()
-        crm_filtrado = crm_completo
+        canal_crm = canal_crm or "sms"
+        crm_filtrado = crm_completo[crm_completo["utm_medium"] == canal_crm] if not crm_completo.empty else crm_completo
         if utms_crm:
             crm_filtrado = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm)]
-        if mediums_crm:
-            crm_filtrado = crm_filtrado[crm_filtrado["utm_medium"].isin(mediums_crm)]
         if grupos_ab:
             crm_filtrado = crm_filtrado[crm_filtrado["grupo_ab"].isin(grupos_ab)]
         crm_agregado = agregar_crm_por_campanha(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         crm_agregado_grupo_ab = (
             agregar_crm_por_grupo_ab(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         )
-        crm_agregado_medium = (
-            agregar_crm_por_medium(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
-        )
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
-        ordem_utms_crm = sorted(crm_completo["utm_campaign"].unique()) if not crm_completo.empty else []
-        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, ordem_utms_crm)
+        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO)
 
         return (
             formatar_numero(kpis["disparado"]),
@@ -253,8 +266,7 @@ def registrar_callbacks(app):
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),
             formatar_numero(totais_crm["acordo"]),
-            charts.grafico_funil_crm(crm_agregado),
-            charts.grafico_crm_por_medium(crm_agregado_medium),
+            charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato")),
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
             _tabela_pivot_crm_component(colunas_pivot, linhas_pivot),

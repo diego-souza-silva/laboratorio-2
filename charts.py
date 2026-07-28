@@ -259,9 +259,9 @@ def formatar_tabela_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
     return registros
 
 
-def grafico_funil_crm(crm_agregado: pd.DataFrame) -> go.Figure:
+def grafico_funil_crm(crm_agregado: pd.DataFrame, rotulo_canal: str = "Pós-Contato") -> go.Figure:
     if crm_agregado.empty:
-        return _layout_base(go.Figure(), "Conversão pós-SMS (sem dados no período)")
+        return _layout_base(go.Figure(), f"Conversão {rotulo_canal} (sem dados no período)")
 
     totais = crm_agregado[ETAPAS_CRM].sum()
     rotulos = [ETAPAS_CRM_LABEL[e] for e in ETAPAS_CRM]
@@ -274,7 +274,7 @@ def grafico_funil_crm(crm_agregado: pd.DataFrame) -> go.Figure:
             connector=dict(line=dict(color=COR_GRADE, width=1)),
         )
     )
-    return _layout_base(fig, "Funil de Conversão Pós-SMS (CRM)", altura=360)
+    return _layout_base(fig, f"Funil de Conversão {rotulo_canal}", altura=360)
 
 
 def grafico_crm_por_campanha(crm_agregado: pd.DataFrame) -> go.Figure:
@@ -309,25 +309,6 @@ def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame) -> go.Figure:
         ))
     fig.update_layout(barmode="group")
     return _layout_base(fig, "Ações de CRM por Grupo AB")
-
-
-MEDIUM_LABEL_CHART = {"whatsapp": "WhatsApp", "sms": "SMS", "email": "E-mail"}
-
-
-def grafico_crm_por_medium(crm_agregado: pd.DataFrame) -> go.Figure:
-    if crm_agregado.empty:
-        return _layout_base(go.Figure(), "Conversão por Canal (sem dados no período)")
-
-    rotulos = [MEDIUM_LABEL_CHART.get(m, m) for m in crm_agregado["utm_medium"]]
-    fig = go.Figure()
-    cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
-    for etapa in ETAPAS_CRM:
-        fig.add_trace(go.Bar(
-            x=rotulos, y=crm_agregado[etapa], name=ETAPAS_CRM_LABEL[etapa],
-            marker_color=cores_etapa[etapa],
-        ))
-    fig.update_layout(barmode="group")
-    return _layout_base(fig, "Ações de CRM por Canal")
 
 
 def formatar_tabela_executiva(agregado: pd.DataFrame) -> list[dict]:

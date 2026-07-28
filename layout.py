@@ -5,8 +5,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, UTM_MEDIUM_ORDEM,
-    carregar_dados_crm, carregar_dados_sms, extremos_data_hora,
+    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms, extremos_data_hora,
 )
 from charts import GRUPO_AB_LABEL, nome_curto
 
@@ -16,8 +15,6 @@ STATUS_LABEL = {
     "Falhou": "Falhou",
     "Nao Processado": "Não Processado",
 }
-
-MEDIUM_LABEL = {"whatsapp": "WhatsApp", "sms": "SMS", "email": "E-mail"}
 
 
 def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
@@ -188,21 +185,22 @@ def _aba_grupo_ab() -> html.Div:
 
 
 def _aba_conversao_crm() -> html.Div:
-    crm = carregar_dados_crm()
-    utms_crm = sorted(crm["utm_campaign"].unique()) if not crm.empty else []
-    mediums_crm = [m for m in UTM_MEDIUM_ORDEM if m in crm["utm_medium"].unique()] if not crm.empty else UTM_MEDIUM_ORDEM
-
     return html.Div([
         dbc.Alert(
             [
                 html.I(className="bi bi-info-circle-fill me-2"),
-                "Seção auxiliar baseada no log de CRM (negociação), não no log de envio de SMS. "
-                "Cobre todos os canais/campanhas do log (SMS, WhatsApp, e-mail — não só as "
-                "campanhas do funil de SMS), com filtro próprio abaixo. Mostra o que aconteceu "
+                "Seção auxiliar baseada no log de CRM (negociação), não no log de envio. "
+                "Restrita às campanhas cadastradas em ARQUIVOS PARA DISPAROS/. Escolha o "
+                "canal abaixo (Pós-SMS/Pós-WhatsApp/Pós-Email) — mostra o que aconteceu "
                 "depois do clique: Home → Autenticação → Oferta → Acordo.",
             ],
             color="info", className="mb-3",
         ),
+        html.Div([
+            html.Button("Pós-SMS", id="btn-canal-sms", n_clicks=0, className="aba-botao aba-ativa"),
+            html.Button("Pós-WhatsApp", id="btn-canal-whatsapp", n_clicks=0, className="aba-botao"),
+            html.Button("Pós-Email", id="btn-canal-email", n_clicks=0, className="aba-botao"),
+        ], className="barra-abas mb-3"),
         dbc.Card(
             dbc.CardBody(
                 dbc.Row([
@@ -210,20 +208,11 @@ def _aba_conversao_crm() -> html.Div:
                         html.Label("Campanha (UTM) — CRM", className="rotulo-filtro"),
                         dcc.Dropdown(
                             id="filtro-utm-crm",
-                            options=[{"label": nome_curto(u), "value": u} for u in utms_crm],
-                            value=utms_crm, multi=True, placeholder="Todas as campanhas",
+                            options=[{"label": nome_curto(u), "value": u} for u in CAMPANHAS_ESCOPO],
+                            value=CAMPANHAS_ESCOPO, multi=True, placeholder="Todas as campanhas",
                             className="dash-dropdown-escuro",
                         ),
-                    ], md=8),
-                    dbc.Col([
-                        html.Label("Canal (Utm Medium)", className="rotulo-filtro"),
-                        dcc.Dropdown(
-                            id="filtro-medium-crm",
-                            options=[{"label": MEDIUM_LABEL.get(m, m), "value": m} for m in mediums_crm],
-                            value=mediums_crm, multi=True, placeholder="Todos os canais",
-                            className="dash-dropdown-escuro",
-                        ),
-                    ], md=4),
+                    ], md=12),
                 ], className="g-3 align-items-end"),
             ),
             className="cartao-filtros shadow-sm mb-3",
@@ -235,12 +224,11 @@ def _aba_conversao_crm() -> html.Div:
             dbc.Col(_cartao_kpi("kpi-crm-acordo", "Acordo Gerado", "bi-file-earmark-check-fill", "#2ECC71"), md=3),
         ], className="g-3 mb-3"),
         dbc.Row([
-            dbc.Col(_grafico_card("Funil de Conversão Pós-SMS", "grafico-funil-crm"), md=6),
-            dbc.Col(_grafico_card("Ações de CRM por Canal", "grafico-crm-medium"), md=6),
+            dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm"), md=6),
+            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
         ], className="g-3 mb-3"),
         dbc.Row([
-            dbc.Col(_grafico_card("Ações de CRM por Campanha", "grafico-crm-campanha"), md=6),
-            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Ações de CRM por Campanha", "grafico-crm-campanha"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
@@ -274,13 +262,14 @@ def criar_layout() -> html.Div:
                             className="aba-botao aba-ativa"),
                 html.Button("Funil por Grupo AB", id="btn-tab-grupo", n_clicks=0,
                             className="aba-botao"),
-                html.Button("Conversão Pós-SMS (CRM)", id="btn-tab-crm", n_clicks=0,
+                html.Button("Conversão Pós-Contato (CRM)", id="btn-tab-crm", n_clicks=0,
                             className="aba-botao"),
             ], className="barra-abas"),
 
             html.Div(_aba_funil_sms(), id="painel-tab-sms"),
             html.Div(_aba_grupo_ab(), id="painel-tab-grupo", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
+            dcc.Store(id="canal-crm-ativo", data="sms"),
         ],
         fluid=True,
         className="container-dashboard",
