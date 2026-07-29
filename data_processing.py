@@ -376,6 +376,9 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
 
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
+    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+
     _cache["crm"] = df
     return df
 
@@ -620,6 +623,15 @@ def agregar_crm_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
     return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
+def agregar_crm_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
+    """Conta ações de CRM (home/auth/oferta/acordo) por grupo_estrategico, ordenado pela numeração do grupo."""
+    tabela = _agregar_crm_por(df, "grupo_estrategico")
+    tabela["ordem"] = tabela["grupo_estrategico"].apply(
+        lambda g: GRUPO_ESTRATEGICO_ORDEM.index(g) if g in GRUPO_ESTRATEGICO_ORDEM else len(GRUPO_ESTRATEGICO_ORDEM)
+    )
+    return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
 def agregar_crm_por_medium(df: pd.DataFrame) -> pd.DataFrame:
     """Conta ações de CRM (home/auth/oferta/acordo) por canal de origem (utm_medium:
     whatsapp/sms/email), na ordem de volume esperado."""
@@ -630,16 +642,21 @@ def agregar_crm_por_medium(df: pd.DataFrame) -> pd.DataFrame:
     return tabela.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
-def montar_pivot_crm(df: pd.DataFrame, utms_ordem: list[str]) -> tuple[list[str], list[dict]]:
-    """Tabela dinâmica Ação (com subtotal) > Grupo AB, colunas = UTM + Total Geral,
-    igual ao pivot manual (Ação nas linhas, UTM nas colunas, grupo_ab como sub-nível)."""
+def montar_pivot_crm(
+    df: pd.DataFrame, utms_ordem: list[str], coluna_grupo: str = "grupo_ab"
+) -> tuple[list[str], list[dict]]:
+    """Tabela dinâmica Ação (com subtotal) > Grupo AB/Grupo Estratégico, colunas = UTM +
+    Total Geral, igual ao pivot manual (Ação nas linhas, UTM nas colunas, grupo como
+    sub-nível). `coluna_grupo` escolhe a dimensão do sub-nível ("grupo_ab" ou
+    "grupo_estrategico")."""
     if df.empty:
         return [], []
 
     utms_presentes = [u for u in utms_ordem if u in df["utm_campaign"].unique()]
+    ordem_map = GRUPO_AB_ORDEM if coluna_grupo == "grupo_ab" else GRUPO_ESTRATEGICO_ORDEM
 
     def ordem_grupo(g):
-        return GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+        return ordem_map.index(g) if g in ordem_map else len(ordem_map)
 
     linhas = []
     totais_coluna = {u: 0 for u in utms_presentes}
@@ -651,7 +668,7 @@ def montar_pivot_crm(df: pd.DataFrame, utms_ordem: list[str]) -> tuple[list[str]
             continue
 
         pivot = sub.pivot_table(
-            index="grupo_ab", columns="utm_campaign", values="acao_norm",
+            index=coluna_grupo, columns="utm_campaign", values="acao_norm",
             aggfunc="count", fill_value=0,
         ).reindex(columns=utms_presentes, fill_value=0)
 

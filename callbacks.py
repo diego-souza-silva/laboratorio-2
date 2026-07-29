@@ -9,9 +9,9 @@ from dash import Input, Output, State, ctx, dash_table, html
 import charts
 from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
-    agregar_por_campanha, agregar_por_grupo_ab, agregar_por_grupo_estrategico,
-    agregar_frase_com_crm, calcular_funil, calcular_kpis, carregar_dados_crm,
-    carregar_dados_sms, filtrar_dados, montar_pivot_crm,
+    agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
+    agregar_por_grupo_estrategico, agregar_frase_com_crm, calcular_funil, calcular_kpis,
+    carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
     montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
@@ -77,12 +77,16 @@ def _tabela_component(registros: list[dict], colunas: list[str]):
     )
 
 
-def _tabela_pivot_crm_component(colunas_utm: list[str], linhas: list[dict]):
+def _tabela_pivot_crm_component(
+    colunas_utm: list[str], linhas: list[dict],
+    titulo_coluna: str = "Ação / Grupo AB", mapa_label: dict | None = None,
+):
     if not linhas:
         return html.P("Nenhum dado para os filtros selecionados.", className="text-muted")
 
+    mapa_label = mapa_label if mapa_label is not None else charts.GRUPO_AB_LABEL
     colunas = (
-        [{"name": "Ação / Grupo AB", "id": "rotulo"}]
+        [{"name": titulo_coluna, "id": "rotulo"}]
         + [{"name": charts.nome_curto(u), "id": u} for u in colunas_utm]
         + [{"name": "Total Geral", "id": "Total Geral"}]
     )
@@ -93,7 +97,7 @@ def _tabela_pivot_crm_component(colunas_utm: list[str], linhas: list[dict]):
     for i, linha in enumerate(linhas):
         rotulo = linha["rotulo"]
         if linha["nivel"] == "detalhe":
-            rotulo = "     " + charts.GRUPO_AB_LABEL.get(rotulo, rotulo)
+            rotulo = "     " + mapa_label.get(rotulo, rotulo)
         else:
             indices_destaque.append(i)
         if linha["nivel"] == "total_geral":
@@ -264,6 +268,7 @@ def registrar_callbacks(app):
         Output("grafico-taxa-entrega-grupo-estrategico", "figure"),
         Output("tabela-grupo-estrategico-container", "children"),
         Output("grafico-taxa-entrega-frase", "figure"),
+        Output("grafico-crm-frase", "figure"),
         Output("tabela-frase-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
@@ -272,7 +277,9 @@ def registrar_callbacks(app):
         Output("grafico-funil-crm", "figure"),
         Output("grafico-crm-campanha", "figure"),
         Output("grafico-crm-grupo-ab", "figure"),
+        Output("grafico-crm-grupo-estrategico", "figure"),
         Output("tabela-crm-pivot-container", "children"),
+        Output("tabela-crm-pivot-estrategico-container", "children"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -323,15 +330,21 @@ def registrar_callbacks(app):
             crm_filtrado = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm)]
         if grupos_ab:
             crm_filtrado = crm_filtrado[crm_filtrado["grupo_ab"].isin(grupos_ab)]
+        if grupos_estrategicos:
+            crm_filtrado = crm_filtrado[crm_filtrado["grupo_estrategico"].isin(grupos_estrategicos)]
         crm_agregado = agregar_crm_por_campanha(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         crm_agregado_grupo_ab = (
             agregar_crm_por_grupo_ab(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
+        )
+        crm_agregado_grupo_estrategico = (
+            agregar_crm_por_grupo_estrategico(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         )
         agregado_frase = agregar_frase_com_crm(filtrado, crm_filtrado)
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
-        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO)
+        colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO, "grupo_ab")
+        colunas_pivot_ge, linhas_pivot_ge = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO, "grupo_estrategico")
 
         return (
             formatar_numero(kpis["disparado"]),
@@ -358,6 +371,7 @@ def registrar_callbacks(app):
             charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico),
             _tabela_grupo_estrategico_ab_component(linhas_grupo_estrategico_ab),
             charts.grafico_taxa_entrega_frase(agregado_frase),
+            charts.grafico_crm_por_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
@@ -366,5 +380,10 @@ def registrar_callbacks(app):
             charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato")),
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
+            charts.grafico_crm_por_grupo_estrategico(crm_agregado_grupo_estrategico),
             _tabela_pivot_crm_component(colunas_pivot, linhas_pivot),
+            _tabela_pivot_crm_component(
+                colunas_pivot_ge, linhas_pivot_ge,
+                titulo_coluna="Ação / Grupo Estratégico", mapa_label=charts.GRUPO_ESTRATEGICO_LABEL,
+            ),
         )

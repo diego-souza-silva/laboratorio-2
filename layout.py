@@ -263,8 +263,9 @@ def _aba_conversao_crm() -> html.Div:
             dbc.Col(_cartao_kpi("kpi-crm-acordo", "Acordo Gerado", "bi-file-earmark-check-fill", "#2ECC71"), md=3),
         ], className="g-3 mb-3"),
         dbc.Row([
-            dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm"), md=6),
-            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm"), md=4),
+            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=4),
+            dbc.Col(_grafico_card("Ações de CRM por Grupo Estratégico", "grafico-crm-grupo-estrategico"), md=4),
         ], className="g-3 mb-3"),
         dbc.Row([
             dbc.Col(_grafico_card("Ações de CRM por Campanha", "grafico-crm-campanha"), md=12),
@@ -276,19 +277,27 @@ def _aba_conversao_crm() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-3",
         ),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Ação × Campanha × Grupo Estratégico (detalhado)", className="mb-3"),
+                html.Div(id="tabela-crm-pivot-estrategico-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-3",
+        ),
         dbc.Alert(
             [
                 html.I(className="bi bi-chat-left-text-fill me-2"),
                 "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
-                "as mensagens são agrupadas pelo texto-modelo (sem o link). O resultado final "
-                "(Home/Autenticação/Oferta/Acordo) é cruzado por telefone com o canal "
-                "selecionado acima — deixe em \"Pós-SMS\" para ver o resultado de quem "
-                "recebeu cada frase.",
+                "as mensagens são agrupadas pelo texto-modelo (sem o link). Abaixo tem tanto a "
+                "taxa de entrega (log de envio) quanto o resultado final no CRM — Home → "
+                "Autenticação → Oferta → Acordo — cruzado por telefone com o canal selecionado "
+                "acima. Deixe em \"Pós-SMS\" para ver o resultado de quem recebeu cada frase.",
             ],
             color="secondary", className="mb-3",
         ),
         dbc.Row([
-            dbc.Col(_grafico_card("Taxa de Entrega por Frase (SMS)", "grafico-taxa-entrega-frase", altura="420px"), md=12),
+            dbc.Col(_grafico_card("Taxa de Entrega por Frase (SMS)", "grafico-taxa-entrega-frase", altura="420px"), md=6),
+            dbc.Col(_grafico_card("Resultado de CRM por Frase (SMS)", "grafico-crm-frase", altura="420px"), md=6),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([

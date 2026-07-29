@@ -423,6 +423,46 @@ def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Ações de CRM por Grupo AB")
 
 
+def grafico_crm_por_grupo_estrategico(crm_agregado: pd.DataFrame) -> go.Figure:
+    if crm_agregado.empty:
+        return _layout_base(go.Figure(), "Conversão por Grupo Estratégico (sem dados no período)")
+
+    ordem = [g for g in GRUPO_ESTRATEGICO_ORDEM if g in crm_agregado["grupo_estrategico"].values]
+    crm_agregado = crm_agregado.set_index("grupo_estrategico").reindex(ordem).reset_index()
+    rotulos = [GRUPO_ESTRATEGICO_LABEL.get(g, g) for g in crm_agregado["grupo_estrategico"]]
+
+    fig = go.Figure()
+    cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+    for etapa in ETAPAS_CRM:
+        fig.add_trace(go.Bar(
+            x=rotulos, y=crm_agregado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+            marker_color=cores_etapa[etapa],
+        ))
+    fig.update_layout(barmode="group")
+    return _layout_base(fig, "Ações de CRM por Grupo Estratégico")
+
+
+def grafico_crm_por_frase(agregado: pd.DataFrame) -> go.Figure:
+    """Home/Autenticação/Oferta/Acordo (log de CRM) por frase-modelo de SMS — mesma
+    frase da Taxa de Entrega, mas mostrando o resultado da negociação, não a entrega."""
+    tem_crm = "acordo" in agregado.columns
+    if agregado.empty or not tem_crm:
+        return _layout_base(go.Figure(), "Resultado de CRM por Frase (sem dados no período)")
+
+    ordenado = agregado.sort_values("acordo")
+    rotulos = [_truncar_frase(f, 55) for f in ordenado["frase_norm"]]
+    fig = go.Figure()
+    cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+    for etapa in ETAPAS_CRM:
+        fig.add_trace(go.Bar(
+            y=rotulos, x=ordenado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+            orientation="h", marker_color=cores_etapa[etapa],
+        ))
+    fig.update_layout(barmode="group")
+    altura = max(280, 70 * len(ordenado))
+    return _layout_base(fig, "Resultado de CRM por Frase (SMS)", altura=altura)
+
+
 def formatar_tabela_executiva(agregado: pd.DataFrame) -> list[dict]:
     registros = []
     for _, linha in agregado.iterrows():
