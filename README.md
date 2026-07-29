@@ -73,7 +73,13 @@ Entregue/Não Enviado, logo abaixo dos cartões "SMS") já trazem o resultado de
 recebeu aquela campanha — só quando a UTM selecionada é de fato uma campanha de
 WhatsApp (sufixo `-otima`/`-airys` no nome do arquivo; ver `canal_da_campanha` em
 `data_processing.py`), pra não misturar com telefones de campanhas de outro canal que
-por acaso se repitam na base. Cada envio tem a saudação personalizada com o primeiro
+por acaso se repitam na base. O cruzamento de telefone usa a coluna `SMS_WHATS` do
+arquivo de disparo (com DDI, específica do envio de WhatsApp/SMS) contra o `Destino` do
+retorno — não a coluna `telefone` genérica — já que `SMS_WHATS` é a que de fato
+identifica o número usado no disparo (ver `telefones_das_campanhas`); no arquivo da
+Otima as duas colunas trazem o mesmo número, mas o código usa a coluna certa mesmo
+assim, caso um arquivo futuro traga números diferentes entre elas. Cada envio tem a
+saudação personalizada com o primeiro
 nome do cliente (ex.: "Oi, FABIANA!"), então na seção "Resultado por Mensagem
 (WhatsApp)" da aba "Conversão Pós-Contato (CRM)" — visível exclusivamente na sub-aba
 Pós-WhatsApp — as mensagens são agrupadas pelo texto-modelo (sem o nome), mesmo

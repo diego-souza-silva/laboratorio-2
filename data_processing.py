@@ -462,13 +462,22 @@ def telefones_das_campanhas(utms: list[str]) -> set[str]:
     disparo — usado para ligar o retorno de canais sem vínculo automático por job (ex.:
     WhatsApp Otima/Airys) à campanha certa, pelo mesmo cruzamento de telefone usado no
     resto do dashboard. O retorno do Otima não traz a UTM da campanha, só o nome
-    interno do fornecedor."""
+    interno do fornecedor. Prioriza a coluna `sms_whats` (com DDI, específica do envio
+    de WhatsApp/SMS) sobre `telefone` quando o arquivo de disparo tiver as duas — no
+    arquivo da Otima elas são idênticas, mas `sms_whats` é a coluna certa caso um
+    arquivo futuro traga números diferentes entre as duas."""
     campanhas = descobrir_campanhas()
     telefones: set[str] = set()
     for utm in utms:
         caminho = campanhas.get(utm)
-        if caminho is not None:
-            telefones |= _telefones_do_arquivo(caminho, "telefone")
+        if caminho is None:
+            continue
+        df = ler_csv_auto(caminho)
+        if "sms_whats" in df.columns:
+            telefones |= {_normalizar_telefone_com_ddi(v) for v in df["sms_whats"]}
+        elif "telefone" in df.columns:
+            telefones |= {normalizar_telefone(v) for v in df["telefone"]}
+    telefones.discard("")
     return telefones
 
 
