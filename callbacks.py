@@ -32,12 +32,12 @@ COLUNAS_TABELA_GRUPO_AB = [
 ]
 
 COLUNAS_TABELA_WHATSAPP_GRUPO_AB = [
-    "Grupo AB", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Grupo AB", "Total", "Entregue", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
 ]
 
 COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO = [
-    "Grupo Estratégico", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Grupo Estratégico", "Total", "Entregue", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
 ]
 
@@ -48,7 +48,7 @@ COLUNAS_TABELA_FRASE = [
 ]
 
 COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
-    "Mensagem (modelo)", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Mensagem (modelo)", "Total", "Entregue", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
     "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
 ]

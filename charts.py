@@ -374,7 +374,7 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
 
 
 _NOMES_SITUACAO_WHATSAPP = {
-    "Entregue": "Entregue", "Lido": "Lido", "Enviado": "Enviado",
+    "Entregue": "Entregue", "Lido": "Lido", "Enviado": "Pendente",
     "Nao Entregue": "Não Entregue", "Nao Enviado": "Não Enviado",
 }
 _CORES_SITUACAO_WHATSAPP = {
@@ -428,7 +428,7 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
             "Total": formatar_numero(linha["total"]),
             "Entregue": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
-            "Enviado": formatar_numero(linha["Enviado"]),
+            "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),
             "Não Enviado": formatar_numero(linha["Nao Enviado"]),
             "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
@@ -482,7 +482,7 @@ def formatar_tabela_whatsapp_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
             "Total": formatar_numero(linha["total"]),
             "Entregue": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
-            "Enviado": formatar_numero(linha["Enviado"]),
+            "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),
             "Não Enviado": formatar_numero(linha["Nao Enviado"]),
             "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
@@ -500,7 +500,7 @@ def formatar_tabela_whatsapp_grupo_estrategico(agregado: pd.DataFrame) -> list[d
             "Total": formatar_numero(linha["total"]),
             "Entregue": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
-            "Enviado": formatar_numero(linha["Enviado"]),
+            "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),
             "Não Enviado": formatar_numero(linha["Nao Enviado"]),
             "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
