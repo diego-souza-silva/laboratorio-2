@@ -149,6 +149,7 @@ def _grafico_card(titulo: str, id_grafico: str, altura: str = "360px") -> dbc.Ca
 
 def _aba_funil_sms() -> html.Div:
     return html.Div([
+        html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row([
             dbc.Col(_grafico_card("Funil Geral", "grafico-funil"), md=7),
             dbc.Col(
@@ -156,6 +157,21 @@ def _aba_funil_sms() -> html.Div:
                     dbc.CardBody([
                         html.H6("Detalhe por Etapa", className="mb-3"),
                         html.Div(id="tabela-funil-detalhe"),
+                    ]),
+                    className="cartao-grafico shadow-sm h-100",
+                ),
+                md=5,
+            ),
+        ], className="g-3 mb-3"),
+
+        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Funil de WhatsApp", "grafico-funil-whatsapp"), md=7),
+            dbc.Col(
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Detalhe por Etapa (WhatsApp)", className="mb-3"),
+                        html.Div(id="tabela-funil-whatsapp-detalhe"),
                     ]),
                     className="cartao-grafico shadow-sm h-100",
                 ),
@@ -300,27 +316,32 @@ def _aba_conversao_crm() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-3",
         ),
-        dbc.Alert(
+        html.Div(
             [
-                html.I(className="bi bi-chat-left-text-fill me-2"),
-                "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
-                "as mensagens são agrupadas pelo texto-modelo (sem o link). Abaixo tem tanto a "
-                "taxa de entrega (log de envio) quanto o resultado final no CRM — Home → "
-                "Autenticação → Oferta → Acordo — cruzado por telefone com o canal selecionado "
-                "acima. Deixe em \"Pós-SMS\" para ver o resultado de quem recebeu cada frase.",
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-chat-left-text-fill me-2"),
+                        "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
+                        "as mensagens são agrupadas pelo texto-modelo (sem o link). Abaixo tem tanto a "
+                        "taxa de entrega (log de envio) quanto o resultado final no CRM — Home → "
+                        "Autenticação → Oferta → Acordo — cruzado por telefone com o canal selecionado "
+                        "acima.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Row([
+                    dbc.Col(_grafico_card("Taxa de Entrega por Frase (SMS)", "grafico-taxa-entrega-frase", altura="420px"), md=6),
+                    dbc.Col(_grafico_card("Resultado de CRM por Frase (SMS)", "grafico-crm-frase", altura="420px"), md=6),
+                ], className="g-3 mb-3"),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Tabela Executiva por Frase (SMS) — com resultado final", className="mb-3"),
+                        html.Div(id="tabela-frase-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
             ],
-            color="secondary", className="mb-3",
-        ),
-        dbc.Row([
-            dbc.Col(_grafico_card("Taxa de Entrega por Frase (SMS)", "grafico-taxa-entrega-frase", altura="420px"), md=6),
-            dbc.Col(_grafico_card("Resultado de CRM por Frase (SMS)", "grafico-crm-frase", altura="420px"), md=6),
-        ], className="g-3 mb-3"),
-        dbc.Card(
-            dbc.CardBody([
-                html.H6("Tabela Executiva por Frase (SMS) — com resultado final", className="mb-3"),
-                html.Div(id="tabela-frase-container"),
-            ]),
-            className="cartao-grafico shadow-sm mb-3",
+            id="secao-frase-sms",
         ),
         html.Div(
             [

@@ -642,6 +642,46 @@ def calcular_funil(df: pd.DataFrame) -> list[dict]:
     return resultado
 
 
+def calcular_funil_whatsapp(kpis_whatsapp: dict) -> list[dict]:
+    """Monta o funil de WhatsApp (Disparado -> Enviado -> Entregue -> Lido) a partir da
+    contagem de status finais (Entregue/Lido/Enviado/Não Entregue/Não Enviado), que são
+    mutuamente exclusivos por natureza (cada envio termina em só um status): Enviado
+    exclui quem falhou antes de sair (Não Enviado); Entregue soma quem só foi entregue
+    com quem já leu (Lido é um estágio mais avançado de quem foi entregue)."""
+    entregue = kpis_whatsapp["Entregue"]
+    lido = kpis_whatsapp["Lido"]
+    enviado_status = kpis_whatsapp["Enviado"]
+    nao_entregue = kpis_whatsapp["Nao Entregue"]
+    nao_enviado = kpis_whatsapp["Nao Enviado"]
+
+    etapas = [
+        ("Disparado", entregue + lido + enviado_status + nao_entregue + nao_enviado),
+        ("Enviado", entregue + lido + enviado_status + nao_entregue),
+        ("Entregue", entregue + lido),
+        ("Lido", lido),
+    ]
+    base = etapas[0][1] or 1
+    resultado = []
+    anterior = None
+    for nome, valor in etapas:
+        percentual_base = taxa(valor, base)
+        if anterior is None:
+            conversao = 100.0
+            perda = 0.0
+        else:
+            conversao = taxa(valor, anterior)
+            perda = 100.0 - conversao
+        resultado.append({
+            "etapa": nome,
+            "quantidade": valor,
+            "percentual_base": percentual_base,
+            "conversao": conversao,
+            "perda": perda,
+        })
+        anterior = valor
+    return resultado
+
+
 def _agregar_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
     agrupado = df.groupby(coluna).agg(
         total_disparado=("disparado", "sum"),

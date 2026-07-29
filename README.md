@@ -109,6 +109,12 @@ convivem lado a lado, e o filtro de Data/Hora serve para comparar ou isolar cada
 Não há coluna de operadora (Claro/Vivo/TIM/Oi) em nenhum arquivo, então essa seção não foi
 incluída no dashboard.
 
+Na aba **Funil Geral**, abaixo do funil de SMS tem o **Funil de WhatsApp** (Disparado →
+Enviado → Entregue → Lido), montado a partir da contagem de status finais do retorno
+Otima/Airys: Enviado exclui quem falhou antes de sair (Não Enviado), e Entregue soma quem
+só foi entregue com quem já leu (Lido é um estágio mais avançado de Entregue). Segue a
+mesma campanha selecionada no filtro "Campanha (UTM)" — ver `canal_da_campanha` acima.
+
 ## Segmentação por Grupo AB e Grupo Estratégico
 
 `ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com colunas

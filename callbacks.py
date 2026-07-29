@@ -11,10 +11,10 @@ from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
-    calcular_funil, calcular_kpis, calcular_kpis_whatsapp, carregar_dados_crm,
-    carregar_dados_sms, carregar_dados_whatsapp_mensagem, filtrar_dados,
-    filtrar_dados_whatsapp, montar_pivot_crm, montar_tabela_grupo_estrategico_com_ab,
-    salvar_diario_estrategia,
+    calcular_funil, calcular_funil_whatsapp, calcular_kpis, calcular_kpis_whatsapp,
+    carregar_dados_crm, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
+    filtrar_dados, filtrar_dados_whatsapp, montar_pivot_crm,
+    montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -239,6 +239,7 @@ def registrar_callbacks(app):
         Output("btn-canal-sms", "className"),
         Output("btn-canal-whatsapp", "className"),
         Output("btn-canal-email", "className"),
+        Output("secao-frase-sms", "style"),
         Output("secao-mensagem-whatsapp", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
@@ -248,10 +249,10 @@ def registrar_callbacks(app):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         oculto, visivel = {"display": "none"}, {"display": "block"}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo, visivel
+            return "whatsapp", inativo, ativo, inativo, oculto, visivel
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, ativo, oculto
-        return "sms", ativo, inativo, inativo, oculto
+            return "email", inativo, inativo, ativo, oculto, oculto
+        return "sms", ativo, inativo, inativo, visivel, oculto
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -269,6 +270,8 @@ def registrar_callbacks(app):
         Output("legenda-filtros", "children"),
         Output("grafico-funil", "figure"),
         Output("tabela-funil-detalhe", "children"),
+        Output("grafico-funil-whatsapp", "figure"),
+        Output("tabela-funil-whatsapp-detalhe", "children"),
         Output("grafico-evolucao-horaria", "figure"),
         Output("grafico-evolucao-diaria", "figure"),
         Output("grafico-volume-utm", "figure"),
@@ -330,6 +333,7 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim,
         )
         kpis_whatsapp = calcular_kpis_whatsapp(whatsapp_filtrado)
+        etapas_whatsapp = calcular_funil_whatsapp(kpis_whatsapp)
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
@@ -388,6 +392,8 @@ def registrar_callbacks(app):
             legenda,
             charts.grafico_funil(etapas),
             _tabela_funil_html(etapas),
+            charts.grafico_funil(etapas_whatsapp, cores=["#8B93B8", "#3DA9FC", "#2ECC71", "#0FA968"]),
+            _tabela_funil_html(etapas_whatsapp),
             charts.grafico_evolucao_horaria(filtrado),
             charts.grafico_evolucao_diaria(filtrado),
             charts.grafico_volume_utm(filtrado),

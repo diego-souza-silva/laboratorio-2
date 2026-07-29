@@ -88,7 +88,7 @@ def _layout_base(fig: go.Figure, titulo: str | None = None, altura: int = 340) -
     return fig
 
 
-def grafico_funil(etapas: list[dict]) -> go.Figure:
+def grafico_funil(etapas: list[dict], cores: list[str] | None = None) -> go.Figure:
     nomes = [e["etapa"] for e in etapas]
     valores = [e["quantidade"] for e in etapas]
     textos = [
@@ -96,7 +96,7 @@ def grafico_funil(etapas: list[dict]) -> go.Figure:
         f"{formatar_percentual(e['percentual_base'])} da base"
         for e in etapas
     ]
-    cores = [CORES["disparado"], CORES["enviado"], CORES["entregue"], CORES["falhou"]]
+    cores = cores or [CORES["disparado"], CORES["enviado"], CORES["entregue"], CORES["falhou"]]
 
     fig = go.Figure(
         go.Funnel(
