@@ -510,6 +510,24 @@ def formatar_tabela_whatsapp_grupo_estrategico(agregado: pd.DataFrame) -> list[d
     return registros
 
 
+def formatar_tabela_whatsapp_campanha(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "UTM": nome_curto(linha["utm_campaign"]),
+            "Total": formatar_numero(linha["total"]),
+            "Entregue (não lido)": formatar_numero(linha["Entregue"]),
+            "Lido": formatar_numero(linha["Lido"]),
+            "Pendente": formatar_numero(linha["Enviado"]),
+            "Não Entregue": formatar_numero(linha["Nao Entregue"]),
+            "Não Enviado": formatar_numero(linha["Nao Enviado"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Leitura": formatar_percentual(linha["taxa_leitura"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
+
+
 def grafico_funil_crm(crm_agregado: pd.DataFrame, rotulo_canal: str = "Pós-Contato") -> go.Figure:
     if crm_agregado.empty:
         return _layout_base(go.Figure(), f"Conversão {rotulo_canal} (sem dados no período)")

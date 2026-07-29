@@ -11,11 +11,11 @@ from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
-    agregar_whatsapp_por_grupo_ab, agregar_whatsapp_por_grupo_estrategico,
-    calcular_funil, calcular_funil_whatsapp, calcular_kpis, calcular_kpis_whatsapp,
-    carregar_dados_crm, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    filtrar_dados, filtrar_dados_whatsapp, montar_pivot_crm,
-    montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
+    agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
+    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_whatsapp,
+    calcular_kpis, calcular_kpis_whatsapp, carregar_dados_crm, carregar_dados_sms,
+    carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
+    montar_pivot_crm, montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -24,6 +24,11 @@ CANAL_LABEL_FUNIL = {"sms": "Pós-SMS", "whatsapp": "Pós-WhatsApp", "email": "P
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
     "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_WHATSAPP_CAMPANHA = [
+    "UTM", "Total", "Entregue (não lido)", "Lido", "Pendente", "Não Entregue", "Não Enviado",
+    "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
 ]
 
 COLUNAS_TABELA_GRUPO_AB = [
@@ -290,6 +295,7 @@ def registrar_callbacks(app):
         Output("grafico-ranking-campanhas", "figure"),
         Output("grafico-taxa-entrega", "figure"),
         Output("tabela-executiva-container", "children"),
+        Output("tabela-whatsapp-campanha-container", "children"),
         Output("grafico-volume-grupo-ab", "figure"),
         Output("grafico-taxa-entrega-grupo-ab", "figure"),
         Output("tabela-grupo-ab-container", "children"),
@@ -352,6 +358,15 @@ def registrar_callbacks(app):
         etapas_whatsapp = calcular_funil_whatsapp(kpis_whatsapp)
         agregado_whatsapp_grupo_ab = agregar_whatsapp_por_grupo_ab(whatsapp_filtrado)
         agregado_whatsapp_grupo_estrategico = agregar_whatsapp_por_grupo_estrategico(whatsapp_filtrado)
+
+        whatsapp_filtrado_sem_utm = filtrar_dados_whatsapp(
+            whatsapp_completo, data_ini=data_ini_dt, data_fim=data_fim_dt,
+            hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
+        )
+        agregado_whatsapp_campanha = agregar_whatsapp_por_campanha(
+            whatsapp_filtrado_sem_utm, utms or CAMPANHAS_ESCOPO
+        )
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
@@ -419,6 +434,10 @@ def registrar_callbacks(app):
             charts.grafico_ranking_campanhas(agregado),
             charts.grafico_taxa_entrega_campanha(agregado),
             _tabela_component(charts.formatar_tabela_executiva(agregado), COLUNAS_TABELA_EXECUTIVA),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_campanha(agregado_whatsapp_campanha),
+                COLUNAS_TABELA_WHATSAPP_CAMPANHA,
+            ),
             charts.grafico_volume_grupo_ab(filtrado),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),

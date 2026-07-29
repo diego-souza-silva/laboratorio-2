@@ -121,6 +121,12 @@ Otima/Airys: Enviado exclui quem falhou antes de sair (Não Enviado), e Entregue
 só foi entregue com quem já leu (Lido é um estágio mais avançado de Entregue). Segue a
 mesma campanha selecionada no filtro "Campanha (UTM)" — ver `canal_da_campanha` acima.
 
+Logo abaixo da "Tabela Executiva por Campanha" (SMS) tem a **Tabela Executiva de
+WhatsApp por Campanha**, com o mesmo detalhamento (Entregue (não lido)/Lido/
+Pendente/Não Entregue/Não Enviado) por campanha de WhatsApp — só lista campanhas com
+retorno já recebido (uma campanha de WhatsApp sem arquivo em `ARQUIVOS DE RETORNO
+WHATSAPP/` ainda não aparece aqui, em vez de mostrar uma linha zerada enganosa).
+
 ## Segmentação por Grupo AB e Grupo Estratégico
 
 `ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com colunas

@@ -576,6 +576,31 @@ def agregar_whatsapp_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
+def agregar_whatsapp_por_campanha(df: pd.DataFrame, utms: list[str]) -> pd.DataFrame:
+    """Resultado de WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
+    campanha, cruzando por telefone — o retorno do Otima não traz a UTM da campanha, só
+    o nome interno do fornecedor (mesmo princípio de `telefones_das_campanhas`). Só
+    considera as UTMs que são de fato de WhatsApp (ver `canal_da_campanha`), ordenado
+    da maior para a menor volumetria."""
+    colunas_vazias = ["utm_campaign", *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
+    utms_whatsapp = [u for u in utms if canal_da_campanha(u) == "whatsapp"]
+    if df.empty or not utms_whatsapp:
+        return pd.DataFrame(columns=colunas_vazias)
+
+    linhas = []
+    for utm in utms_whatsapp:
+        telefones = telefones_das_campanhas([utm])
+        sub = df[df["telefone_norm"].isin(telefones)]
+        if sub.empty:
+            continue
+        agregado = _agregar_whatsapp_por(sub.assign(utm_campaign=utm), "utm_campaign")
+        linhas.append(agregado)
+
+    if not linhas:
+        return pd.DataFrame(columns=colunas_vazias)
+    return pd.concat(linhas, ignore_index=True).sort_values("total", ascending=False).reset_index(drop=True)
+
+
 def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:
     """Tabela por mensagem-modelo de WhatsApp (sem a saudação personalizada), com a
     contagem de cada status final (Entregue/Lido/Enviado/Não Entregue/Não Enviado) e

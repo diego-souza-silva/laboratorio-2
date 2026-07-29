@@ -201,6 +201,15 @@ def _aba_funil_sms() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-3",
         ),
+
+        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Campanha", className="mb-3"),
+                html.Div(id="tabela-whatsapp-campanha-container"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
     ])
 
 
