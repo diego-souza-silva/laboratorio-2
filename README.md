@@ -65,13 +65,19 @@ retorno por telefone; retorno por e-mail ainda não é suportado).
 ### `ARQUIVOS DE RETORNO WHATSAPP/`
 Relatório de entrega do WhatsApp (Otima/Airys), com colunas `Destino` (telefone),
 `Mensagem` e `Situação` (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
-destinatário. Diferente do retorno da Kolmeya, **não entra no Funil Geral** (que é
-específico do canal SMS) — alimenta só a seção "Resultado por Mensagem (WhatsApp)" na
-aba "Conversão Pós-Contato (CRM)", visível exclusivamente na sub-aba Pós-WhatsApp. Todo
-`.csv` desta pasta é lido e concatenado, deduplicado pelo `Identificador` (UUID único por
-envio). Cada envio tem a saudação personalizada com o primeiro nome do cliente (ex.: "Oi,
-FABIANA!"), então as mensagens são agrupadas pelo texto-modelo (sem o nome) — mesmo
-princípio do "Resultado por Frase (SMS)" — e cruzadas por telefone com o log de CRM para
+destinatário. Todo `.csv` desta pasta é lido e concatenado, deduplicado pelo
+`Identificador` (UUID único por envio). Diferente do retorno da Kolmeya, o vínculo com a
+campanha não é por job — é por telefone: ao selecionar uma campanha no filtro "Campanha
+(UTM)" da aba **Funil Geral**, os cartões "WHATSAPP" (Entregue/Lido/Enviado/Não
+Entregue/Não Enviado, logo abaixo dos cartões "SMS") já trazem o resultado de quem
+recebeu aquela campanha — só quando a UTM selecionada é de fato uma campanha de
+WhatsApp (sufixo `-otima`/`-airys` no nome do arquivo; ver `canal_da_campanha` em
+`data_processing.py`), pra não misturar com telefones de campanhas de outro canal que
+por acaso se repitam na base. Cada envio tem a saudação personalizada com o primeiro
+nome do cliente (ex.: "Oi, FABIANA!"), então na seção "Resultado por Mensagem
+(WhatsApp)" da aba "Conversão Pós-Contato (CRM)" — visível exclusivamente na sub-aba
+Pós-WhatsApp — as mensagens são agrupadas pelo texto-modelo (sem o nome), mesmo
+princípio do "Resultado por Frase (SMS)", e cruzadas por telefone com o log de CRM para
 mostrar o resultado final (Home/Autenticação/Oferta/Acordo) de quem recebeu cada
 mensagem.
 

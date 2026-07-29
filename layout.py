@@ -6,7 +6,8 @@ import dash_bootstrap_components as dbc
 
 from data_processing import (
     CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, STATUS_FUNIL_ORDEM,
-    carregar_dados_sms, extremos_data_hora, ler_diario_estrategia,
+    carregar_dados_sms, carregar_dados_whatsapp_mensagem, extremos_data_hora,
+    ler_diario_estrategia,
 )
 from charts import GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, nome_curto
 
@@ -31,8 +32,8 @@ def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
     )
 
 
-def _linha_kpis() -> dbc.Row:
-    cartoes = [
+def _linha_kpis() -> html.Div:
+    cartoes_sms = [
         ("kpi-disparado", "Total Disparado", "bi-send-fill", "#8B93B8"),
         ("kpi-enviado", "Total Enviado", "bi-paper-plane-fill", "#3DA9FC"),
         ("kpi-entregue", "Total Entregue", "bi-check-circle-fill", "#2ECC71"),
@@ -41,15 +42,30 @@ def _linha_kpis() -> dbc.Row:
         ("kpi-taxa-entrega", "Taxa de Entrega", "bi-graph-up-arrow", "#2ECC71"),
         ("kpi-taxa-falha", "Taxa de Falha", "bi-graph-down", "#FF5C5C"),
     ]
-    return dbc.Row(
-        [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes],
-        className="g-3 mb-3",
-    )
+    cartoes_whatsapp = [
+        ("kpi-whatsapp-entregue", "Entregue", "bi-check-circle-fill", "#2ECC71"),
+        ("kpi-whatsapp-lido", "Lido", "bi-eye-fill", "#2ECC71"),
+        ("kpi-whatsapp-enviado", "Enviado", "bi-paper-plane-fill", "#F5A623"),
+        ("kpi-whatsapp-nao-entregue", "Não Entregue", "bi-x-circle-fill", "#FF5C5C"),
+        ("kpi-whatsapp-nao-enviado", "Não Enviado", "bi-dash-circle-fill", "#8B93B8"),
+    ]
+    return html.Div([
+        html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_sms],
+            className="g-3 mb-3",
+        ),
+        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_whatsapp],
+            className="g-3 mb-3",
+        ),
+    ])
 
 
 def _painel_filtros() -> dbc.Card:
     df = carregar_dados_sms()
-    data_min, data_max, hora_min, hora_max = extremos_data_hora(df)
+    data_min, data_max, hora_min, hora_max = extremos_data_hora(df, carregar_dados_whatsapp_mensagem())
 
     return dbc.Card(
         dbc.CardBody([

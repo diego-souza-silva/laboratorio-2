@@ -116,6 +116,28 @@ GRUPO_ESTRATEGICO_ORDEM = [
 
 UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "email"]
 
+_CANAL_POR_FORNECEDOR = {
+    "kolmeya": "sms",
+    "otima": "whatsapp",
+    "airys": "whatsapp",
+    "salesforce": "email",
+}
+
+
+def canal_da_campanha(utm: str) -> str:
+    """Infere o canal (sms/whatsapp/email) de uma UTM pelo sufixo da plataforma no
+    nome do arquivo de disparo (ex.: "...-kolmeya" -> sms, "...-otima"/"...-airys" ->
+    whatsapp, "...-salesforce" -> email). Usado pra restringir o cruzamento de
+    telefone do retorno de WhatsApp só às campanhas do canal certo — sem isso, uma
+    campanha de SMS que por coincidência compartilhe telefones com uma campanha de
+    WhatsApp (mesma base de clientes, canais diferentes) apareceria com resultado de
+    WhatsApp que não é dela."""
+    if not utm:
+        return "desconhecido"
+    fornecedor = utm.rsplit("-", 1)[-1].lower()
+    return _CANAL_POR_FORNECEDOR.get(fornecedor, "desconhecido")
+
+
 SITUACOES_WHATSAPP = ["Entregue", "Lido", "Enviado", "Nao Entregue", "Nao Enviado"]
 _SITUACAO_WHATSAPP_MAPA = {
     "entregue": "Entregue",
@@ -397,10 +419,11 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
 
 def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o(s) retorno(s) de WhatsApp (Otima/Airys) em `ARQUIVOS DE RETORNO
-    WHATSAPP/` — relatório de entrega por destinatário (Destino/Mensagem/Situação),
-    usado só na aba de Conversão Pós-Contato (CRM), exclusivamente na visão
-    Pós-WhatsApp. Não participa do funil de Disparo/Envio/Entrega da aba Funil Geral,
-    que é específico do canal SMS/Kolmeya."""
+    WHATSAPP/` — relatório de entrega por destinatário (Destino/Mensagem/Situação).
+    Usado tanto nos cartões de KPI do WhatsApp na aba Funil Geral (contagem simples de
+    Entregue/Lido/Enviado/Não Entregue/Não Enviado, sem participar do funil de
+    Disparo/Envio/Entrega que é específico do SMS/Kolmeya) quanto na seção "Resultado
+    por Mensagem" da aba Conversão Pós-Contato (CRM), exclusiva da visão Pós-WhatsApp."""
     if not forcar_reload and "whatsapp_mensagem" in _cache:
         return _cache["whatsapp_mensagem"]
 
@@ -421,8 +444,66 @@ def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFram
     df["mensagem_norm"] = df["mensagem"].apply(normalizar_mensagem_whatsapp)
     df = df[df["telefone_norm"] != ""]
 
+    df["timestamp"] = pd.to_datetime(df["data envio"], format="%d/%m/%Y %H:%M", errors="coerce")
+    df["data"] = df["timestamp"].dt.date
+    df["hora"] = df["timestamp"].dt.hour
+
     _cache["whatsapp_mensagem"] = df
     return df
+
+
+def telefones_das_campanhas(utms: list[str]) -> set[str]:
+    """Telefones (normalizados) das campanhas selecionadas, direto do arquivo de
+    disparo — usado para ligar o retorno de canais sem vínculo automático por job (ex.:
+    WhatsApp Otima/Airys) à campanha certa, pelo mesmo cruzamento de telefone usado no
+    resto do dashboard. O retorno do Otima não traz a UTM da campanha, só o nome
+    interno do fornecedor."""
+    campanhas = descobrir_campanhas()
+    telefones: set[str] = set()
+    for utm in utms:
+        caminho = campanhas.get(utm)
+        if caminho is not None:
+            telefones |= _telefones_do_arquivo(caminho, "telefone")
+    return telefones
+
+
+def filtrar_dados_whatsapp(
+    df: pd.DataFrame,
+    utms: list[str] | None = None,
+    data_ini=None,
+    data_fim=None,
+    hora_ini: int | None = None,
+    hora_fim: int | None = None,
+) -> pd.DataFrame:
+    """Aplica os filtros globais (campanha/período/hora) sobre o retorno de WhatsApp,
+    restringindo aos telefones das campanhas de WhatsApp selecionadas (campanhas de
+    outro canal são ignoradas, mesmo se selecionadas junto — ver `canal_da_campanha`)."""
+    filtrado = df
+    if utms:
+        utms_whatsapp = [u for u in utms if canal_da_campanha(u) == "whatsapp"]
+        if not utms_whatsapp:
+            return df.iloc[0:0]
+        filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_whatsapp))]
+    if data_ini is not None and data_fim is not None:
+        no_periodo = filtrado["data"].isna() | (
+            (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
+        )
+        filtrado = filtrado[no_periodo]
+    if hora_ini is not None and hora_fim is not None:
+        na_janela = filtrado["hora"].isna() | (
+            (filtrado["hora"] >= hora_ini) & (filtrado["hora"] <= hora_fim)
+        )
+        filtrado = filtrado[na_janela]
+    return filtrado
+
+
+def calcular_kpis_whatsapp(df: pd.DataFrame) -> dict:
+    """Contagem simples por status final (Entregue/Lido/Enviado/Não Entregue/Não
+    Enviado) do retorno de WhatsApp, pros cartões de KPI da aba Funil Geral."""
+    if df.empty:
+        return {status: 0 for status in SITUACOES_WHATSAPP}
+    contagem = df["situacao_norm"].value_counts()
+    return {status: int(contagem.get(status, 0)) for status in SITUACOES_WHATSAPP}
 
 
 def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:
@@ -798,12 +879,16 @@ def montar_pivot_crm(
     return utms_presentes, linhas
 
 
-def extremos_data_hora(df: pd.DataFrame) -> tuple:
-    validas = df.dropna(subset=["timestamp"])
-    if validas.empty:
+def extremos_data_hora(*dfs: pd.DataFrame) -> tuple:
+    """Data mínima/máxima entre um ou mais dataframes de eventos (ex.: SMS + retorno de
+    WhatsApp), usada como intervalo padrão do filtro de Período — pra o período inicial
+    já cobrir todos os canais, não só o SMS/Kolmeya."""
+    datas = [df.dropna(subset=["timestamp"])["data"] for df in dfs if not df.empty]
+    todas = pd.concat(datas, ignore_index=True) if datas else pd.Series(dtype="object")
+    if todas.empty:
         hoje = pd.Timestamp.now().date()
         return hoje, hoje, 0, 23
-    return validas["data"].min(), validas["data"].max(), 0, 23
+    return todas.min(), todas.max(), 0, 23
 
 
 def ler_diario_estrategia() -> str:
