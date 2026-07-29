@@ -304,7 +304,46 @@ def _aba_conversao_crm() -> html.Div:
                 html.H6("Tabela Executiva por Frase (SMS) — com resultado final", className="mb-3"),
                 html.Div(id="tabela-frase-container"),
             ]),
-            className="cartao-grafico shadow-sm",
+            className="cartao-grafico shadow-sm mb-3",
+        ),
+        html.Div(
+            [
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-whatsapp me-2"),
+                        "Resultado por mensagem de WhatsApp (retorno Otima): cada envio tem a "
+                        "saudação personalizada com o primeiro nome do cliente, então as "
+                        "mensagens são agrupadas pelo texto-modelo (sem o nome). Mostra o status "
+                        "final de cada envio (Entregue/Lido/Enviado/Não Entregue/Não Enviado) e "
+                        "o resultado final no CRM (Home/Autenticação/Oferta/Acordo), cruzado por "
+                        "telefone.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        _grafico_card(
+                            "Status de Entrega por Mensagem (WhatsApp)",
+                            "grafico-status-mensagem-whatsapp", altura="420px",
+                        ), md=6,
+                    ),
+                    dbc.Col(
+                        _grafico_card(
+                            "Resultado de CRM por Mensagem (WhatsApp)",
+                            "grafico-crm-mensagem-whatsapp", altura="420px",
+                        ), md=6,
+                    ),
+                ], className="g-3 mb-3"),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Tabela Executiva por Mensagem (WhatsApp) — com resultado final", className="mb-3"),
+                        html.Div(id="tabela-mensagem-whatsapp-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm",
+                ),
+            ],
+            id="secao-mensagem-whatsapp",
+            style={"display": "none"},
         ),
     ])
 

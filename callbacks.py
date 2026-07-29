@@ -10,8 +10,9 @@ import charts
 from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
-    agregar_por_grupo_estrategico, agregar_frase_com_crm, calcular_funil, calcular_kpis,
-    carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
+    agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
+    calcular_funil, calcular_kpis, carregar_dados_crm, carregar_dados_sms,
+    carregar_dados_whatsapp_mensagem, filtrar_dados, montar_pivot_crm,
     montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
@@ -31,6 +32,12 @@ COLUNAS_TABELA_GRUPO_AB = [
 COLUNAS_TABELA_FRASE = [
     "Frase (modelo)", "Campanha(s)", "Total Disparado", "Total Enviado", "Total Entregue",
     "Total Falhado", "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+    "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
+]
+
+COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
+    "Mensagem (modelo)", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
     "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
 ]
 
@@ -231,17 +238,19 @@ def registrar_callbacks(app):
         Output("btn-canal-sms", "className"),
         Output("btn-canal-whatsapp", "className"),
         Output("btn-canal-email", "className"),
+        Output("secao-mensagem-whatsapp", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
         Input("btn-canal-email", "n_clicks"),
     )
     def alternar_canal_crm(_n_sms, _n_whatsapp, _n_email):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
+        oculto, visivel = {"display": "none"}, {"display": "block"}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo
+            return "whatsapp", inativo, ativo, inativo, visivel
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, ativo
-        return "sms", ativo, inativo, inativo
+            return "email", inativo, inativo, ativo, oculto
+        return "sms", ativo, inativo, inativo, oculto
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -270,6 +279,9 @@ def registrar_callbacks(app):
         Output("grafico-taxa-entrega-frase", "figure"),
         Output("grafico-crm-frase", "figure"),
         Output("tabela-frase-container", "children"),
+        Output("grafico-status-mensagem-whatsapp", "figure"),
+        Output("grafico-crm-mensagem-whatsapp", "figure"),
+        Output("tabela-mensagem-whatsapp-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -340,6 +352,8 @@ def registrar_callbacks(app):
             agregar_crm_por_grupo_estrategico(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         )
         agregado_frase = agregar_frase_com_crm(filtrado, crm_filtrado)
+        df_whatsapp_completo = carregar_dados_whatsapp_mensagem()
+        agregado_mensagem_whatsapp = agregar_mensagem_whatsapp_com_crm(df_whatsapp_completo, crm_filtrado)
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
@@ -373,6 +387,12 @@ def registrar_callbacks(app):
             charts.grafico_taxa_entrega_frase(agregado_frase),
             charts.grafico_crm_por_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
+            charts.grafico_status_mensagem_whatsapp(agregado_mensagem_whatsapp),
+            charts.grafico_crm_por_mensagem_whatsapp(agregado_mensagem_whatsapp),
+            _tabela_component(
+                charts.formatar_tabela_mensagem_whatsapp(agregado_mensagem_whatsapp),
+                COLUNAS_TABELA_MENSAGEM_WHATSAPP,
+            ),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),

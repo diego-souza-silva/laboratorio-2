@@ -24,11 +24,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils import normalizar_frase, normalizar_telefone, parse_data_pt_br, taxa
+from utils import normalizar_frase, normalizar_mensagem_whatsapp, normalizar_telefone, parse_data_pt_br, taxa
 
 RAIZ_PROJETO = Path(__file__).parent
 DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
 DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
+DIR_RETORNO_WHATSAPP = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP"
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
@@ -114,6 +115,17 @@ GRUPO_ESTRATEGICO_ORDEM = [
 ]
 
 UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "email"]
+
+SITUACOES_WHATSAPP = ["Entregue", "Lido", "Enviado", "Nao Entregue", "Nao Enviado"]
+_SITUACAO_WHATSAPP_MAPA = {
+    "entregue": "Entregue",
+    "lido": "Lido",
+    "enviado": "Enviado",
+    "não entregue": "Nao Entregue",
+    "nao entregue": "Nao Entregue",
+    "não enviado": "Nao Enviado",
+    "nao enviado": "Nao Enviado",
+}
 
 _cache: dict[str, pd.DataFrame] = {}
 
@@ -381,6 +393,90 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
 
     _cache["crm"] = df
     return df
+
+
+def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFrame:
+    """Carrega o(s) retorno(s) de WhatsApp (Otima/Airys) em `ARQUIVOS DE RETORNO
+    WHATSAPP/` — relatório de entrega por destinatário (Destino/Mensagem/Situação),
+    usado só na aba de Conversão Pós-Contato (CRM), exclusivamente na visão
+    Pós-WhatsApp. Não participa do funil de Disparo/Envio/Entrega da aba Funil Geral,
+    que é específico do canal SMS/Kolmeya."""
+    if not forcar_reload and "whatsapp_mensagem" in _cache:
+        return _cache["whatsapp_mensagem"]
+
+    arquivos = sorted(DIR_RETORNO_WHATSAPP.glob("*.csv"))
+    partes = [ler_csv_auto(caminho) for caminho in arquivos]
+    df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
+    if df.empty:
+        _cache["whatsapp_mensagem"] = df
+        return df
+
+    if "identificador" in df.columns:
+        df = df.drop_duplicates("identificador")
+
+    df["telefone_norm"] = df["destino"].apply(_normalizar_telefone_com_ddi)
+    df["situacao_norm"] = (
+        df["situação"].str.strip().str.lower().map(_SITUACAO_WHATSAPP_MAPA).fillna("Outro")
+    )
+    df["mensagem_norm"] = df["mensagem"].apply(normalizar_mensagem_whatsapp)
+    df = df[df["telefone_norm"] != ""]
+
+    _cache["whatsapp_mensagem"] = df
+    return df
+
+
+def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por mensagem-modelo de WhatsApp (sem a saudação personalizada), com a
+    contagem de cada status final (Entregue/Lido/Enviado/Não Entregue/Não Enviado) e
+    as taxas de entrega/leitura/falha, ordenada da maior para a menor volumetria."""
+    colunas_vazias = ["mensagem_norm", *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
+    if df.empty:
+        return pd.DataFrame(columns=colunas_vazias)
+
+    validas = df[df["mensagem_norm"] != ""]
+    if validas.empty:
+        return pd.DataFrame(columns=colunas_vazias)
+
+    contagem = validas.groupby(["mensagem_norm", "situacao_norm"]).size().unstack(fill_value=0)
+    for status in SITUACOES_WHATSAPP:
+        if status not in contagem.columns:
+            contagem[status] = 0
+    contagem = contagem[SITUACOES_WHATSAPP].reset_index()
+
+    contagem["total"] = contagem[SITUACOES_WHATSAPP].sum(axis=1)
+    contagem["taxa_entrega"] = contagem.apply(
+        lambda r: taxa(r["Entregue"] + r["Lido"], r["total"]), axis=1
+    )
+    contagem["taxa_leitura"] = contagem.apply(lambda r: taxa(r["Lido"], r["total"]), axis=1)
+    contagem["taxa_falha"] = contagem.apply(
+        lambda r: taxa(r["Nao Entregue"] + r["Nao Enviado"], r["total"]), axis=1
+    )
+    return contagem.sort_values("total", ascending=False).reset_index(drop=True)
+
+
+def agregar_mensagem_whatsapp_com_crm(df_whatsapp: pd.DataFrame, df_crm: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por mensagem-modelo de WhatsApp incluindo o resultado final no CRM
+    (home/auth/oferta/acordo), cruzado por telefone — mesmo princípio usado para a
+    frase de SMS (`agregar_frase_com_crm`)."""
+    base = agregar_mensagem_whatsapp(df_whatsapp)
+    for etapa in ETAPAS_CRM:
+        base[etapa] = 0
+    if base.empty or df_crm.empty:
+        return base
+
+    validas = df_whatsapp[df_whatsapp["mensagem_norm"] != ""]
+    telefones_por_mensagem = validas.groupby("mensagem_norm")["telefone_norm"].apply(set)
+
+    for i, linha in base.iterrows():
+        telefones = telefones_por_mensagem.get(linha["mensagem_norm"], set())
+        if not telefones:
+            continue
+        sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones)]
+        contagem = sub_crm["acao_norm"].value_counts()
+        for etapa in ETAPAS_CRM:
+            base.at[i, etapa] = int(contagem.get(etapa, 0))
+
+    return base
 
 
 def filtrar_dados(

@@ -6,7 +6,9 @@ import re
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_processing import ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM
+from data_processing import (
+    ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
+)
 from utils import formatar_numero, formatar_percentual
 
 CORES = {
@@ -360,6 +362,77 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
             "Total Falhado": formatar_numero(linha["total_falhado"]),
             "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
             "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        }
+        if tem_crm:
+            registro["Home"] = formatar_numero(linha["home"])
+            registro["Autenticação"] = formatar_numero(linha["auth"])
+            registro["Oferta"] = formatar_numero(linha["oferta"])
+            registro["Acordo (resultado final)"] = formatar_numero(linha["acordo"])
+        registros.append(registro)
+    return registros
+
+
+_NOMES_SITUACAO_WHATSAPP = {
+    "Entregue": "Entregue", "Lido": "Lido", "Enviado": "Enviado",
+    "Nao Entregue": "Não Entregue", "Nao Enviado": "Não Enviado",
+}
+_CORES_SITUACAO_WHATSAPP = {
+    "Entregue": CORES["entregue"], "Lido": "#2ECC71", "Enviado": CORES["pendente"],
+    "Nao Entregue": CORES["falhou"], "Nao Enviado": "#8B93B8",
+}
+
+
+def grafico_status_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Status de Entrega por Mensagem (sem dados no período)")
+
+    ordenado = agregado.sort_values("taxa_entrega")
+    rotulos = [_truncar_frase(m, 55) for m in ordenado["mensagem_norm"]]
+    fig = go.Figure()
+    for status in SITUACOES_WHATSAPP:
+        fig.add_trace(go.Bar(
+            y=rotulos, x=ordenado[status], name=_NOMES_SITUACAO_WHATSAPP[status],
+            orientation="h", marker_color=_CORES_SITUACAO_WHATSAPP[status],
+        ))
+    fig.update_layout(barmode="stack")
+    altura = max(280, 70 * len(ordenado))
+    return _layout_base(fig, "Status de Entrega por Mensagem (WhatsApp)", altura=altura)
+
+
+def grafico_crm_por_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
+    tem_crm = "acordo" in agregado.columns
+    if agregado.empty or not tem_crm:
+        return _layout_base(go.Figure(), "Resultado de CRM por Mensagem (sem dados no período)")
+
+    ordenado = agregado.sort_values("acordo")
+    rotulos = [_truncar_frase(m, 55) for m in ordenado["mensagem_norm"]]
+    fig = go.Figure()
+    cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+    for etapa in ETAPAS_CRM:
+        fig.add_trace(go.Bar(
+            y=rotulos, x=ordenado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+            orientation="h", marker_color=cores_etapa[etapa],
+        ))
+    fig.update_layout(barmode="group")
+    altura = max(280, 70 * len(ordenado))
+    return _layout_base(fig, "Resultado de CRM por Mensagem (WhatsApp)", altura=altura)
+
+
+def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
+    tem_crm = "acordo" in agregado.columns
+    registros = []
+    for _, linha in agregado.iterrows():
+        registro = {
+            "Mensagem (modelo)": _truncar_frase(linha["mensagem_norm"], 140),
+            "Total": formatar_numero(linha["total"]),
+            "Entregue": formatar_numero(linha["Entregue"]),
+            "Lido": formatar_numero(linha["Lido"]),
+            "Enviado": formatar_numero(linha["Enviado"]),
+            "Não Entregue": formatar_numero(linha["Nao Entregue"]),
+            "Não Enviado": formatar_numero(linha["Nao Enviado"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Leitura": formatar_percentual(linha["taxa_leitura"]),
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         }
         if tem_crm:

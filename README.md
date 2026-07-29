@@ -20,8 +20,9 @@ O navegador abre automaticamente em `http://127.0.0.1:8051/`.
 - `layout.py` — layout Dash/Bootstrap (filtros, cards de KPI, abas, tabela).
 - `callbacks.py` — callback que liga os filtros a todos os componentes.
 - `utils.py` — parsing de datas em português, normalização de telefone, formatação.
-- `ARQUIVOS PARA DISPAROS/`, `ARQUIVOS DE RETORNO/`, `ARQUIVOS LOG/`, `ARQUIVO DA BASE INTEIRA/`
-  — pastas de dados na raiz do projeto (ao lado de `app.py`), descritas abaixo.
+- `ARQUIVOS PARA DISPAROS/`, `ARQUIVOS DE RETORNO/`, `ARQUIVOS DE RETORNO WHATSAPP/`,
+  `ARQUIVOS LOG/`, `ARQUIVO DA BASE INTEIRA/` — pastas de dados na raiz do projeto (ao
+  lado de `app.py`), descritas abaixo.
 - `DIARIO_ESTRATEGIA.md` — bloco de notas com o histórico de decisões/estratégia por dia,
   editável direto na aba "Diário / Estratégia" do dashboard (botão "Salvar" grava aqui).
 
@@ -60,6 +61,19 @@ tiver retorno (resultado ainda não voltou), a campanha aparece com tudo em "Nã
 Processado" até o arquivo de retorno chegar — isso vale também para campanhas de
 WhatsApp/e-mail cujo retorno ainda não foi enviado (o vínculo automático hoje só cobre
 retorno por telefone; retorno por e-mail ainda não é suportado).
+
+### `ARQUIVOS DE RETORNO WHATSAPP/`
+Relatório de entrega do WhatsApp (Otima/Airys), com colunas `Destino` (telefone),
+`Mensagem` e `Situação` (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
+destinatário. Diferente do retorno da Kolmeya, **não entra no Funil Geral** (que é
+específico do canal SMS) — alimenta só a seção "Resultado por Mensagem (WhatsApp)" na
+aba "Conversão Pós-Contato (CRM)", visível exclusivamente na sub-aba Pós-WhatsApp. Todo
+`.csv` desta pasta é lido e concatenado, deduplicado pelo `Identificador` (UUID único por
+envio). Cada envio tem a saudação personalizada com o primeiro nome do cliente (ex.: "Oi,
+FABIANA!"), então as mensagens são agrupadas pelo texto-modelo (sem o nome) — mesmo
+princípio do "Resultado por Frase (SMS)" — e cruzadas por telefone com o log de CRM para
+mostrar o resultado final (Home/Autenticação/Oferta/Acordo) de quem recebeu cada
+mensagem.
 
 ### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão

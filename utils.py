@@ -18,6 +18,8 @@ _DATA_PT_RE = re.compile(
 )
 
 _LINK_RE = re.compile(r"https?://\S+")
+_ESPACOS_RE = re.compile(r"\s+")
+_SAUDACAO_WHATSAPP_RE = re.compile(r"^(Oi|Ol[áa])[,]?\s+[^\s!.,]+[!.,]", re.IGNORECASE)
 
 
 def normalizar_frase(mensagem) -> str:
@@ -27,6 +29,18 @@ def normalizar_frase(mensagem) -> str:
     if not isinstance(mensagem, str) or not mensagem.strip():
         return ""
     return _LINK_RE.sub("{link}", mensagem).strip()
+
+
+def normalizar_mensagem_whatsapp(mensagem) -> str:
+    """Reduz a mensagem de WhatsApp ao seu texto-modelo: cada envio é personalizado com
+    o primeiro nome do cliente na saudação (ex.: "Oi, FABIANA!"/"Olá, CRISTIANE."), então
+    sem isso cada linha viraria um grupo próprio. Substitui a saudação personalizada por
+    um marcador fixo e normaliza espaços (o export tem espaçamento inconsistente entre
+    linhas do mesmo modelo) pra agrupar por modelo de mensagem."""
+    if not isinstance(mensagem, str) or not mensagem.strip():
+        return ""
+    texto = _ESPACOS_RE.sub(" ", mensagem.strip().strip('"')).strip()
+    return _SAUDACAO_WHATSAPP_RE.sub(lambda m: f"{m.group(1)}, {{nome}}!", texto)
 
 
 def strip_accents(texto: str) -> str:
