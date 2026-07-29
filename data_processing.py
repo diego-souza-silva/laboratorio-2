@@ -448,6 +448,11 @@ def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFram
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
+    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+
     _cache["whatsapp_mensagem"] = df
     return df
 
@@ -474,16 +479,23 @@ def filtrar_dados_whatsapp(
     data_fim=None,
     hora_ini: int | None = None,
     hora_fim: int | None = None,
+    grupos_ab: list[str] | None = None,
+    grupos_estrategicos: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Aplica os filtros globais (campanha/período/hora) sobre o retorno de WhatsApp,
-    restringindo aos telefones das campanhas de WhatsApp selecionadas (campanhas de
-    outro canal são ignoradas, mesmo se selecionadas junto — ver `canal_da_campanha`)."""
+    """Aplica os filtros globais (campanha/período/hora/grupo_ab/grupo_estratégico)
+    sobre o retorno de WhatsApp, restringindo aos telefones das campanhas de WhatsApp
+    selecionadas (campanhas de outro canal são ignoradas, mesmo se selecionadas junto —
+    ver `canal_da_campanha`)."""
     filtrado = df
     if utms:
         utms_whatsapp = [u for u in utms if canal_da_campanha(u) == "whatsapp"]
         if not utms_whatsapp:
             return df.iloc[0:0]
         filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_whatsapp))]
+    if grupos_ab:
+        filtrado = filtrado[filtrado["grupo_ab"].isin(grupos_ab)]
+    if grupos_estrategicos:
+        filtrado = filtrado[filtrado["grupo_estrategico"].isin(grupos_estrategicos)]
     if data_ini is not None and data_fim is not None:
         no_periodo = filtrado["data"].isna() | (
             (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
@@ -504,6 +516,55 @@ def calcular_kpis_whatsapp(df: pd.DataFrame) -> dict:
         return {status: 0 for status in SITUACOES_WHATSAPP}
     contagem = df["situacao_norm"].value_counts()
     return {status: int(contagem.get(status, 0)) for status in SITUACOES_WHATSAPP}
+
+
+def _agregar_whatsapp_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
+    """Contagem de status finais do WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não
+    Enviado) agrupada por uma coluna (grupo_ab ou grupo_estrategico), com as mesmas
+    taxas de entrega/leitura/falha usadas no "Resultado por Mensagem"."""
+    colunas_vazias = [coluna, *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
+    if df.empty:
+        return pd.DataFrame(columns=colunas_vazias)
+
+    contagem = df.groupby([coluna, "situacao_norm"]).size().unstack(fill_value=0)
+    for status in SITUACOES_WHATSAPP:
+        if status not in contagem.columns:
+            contagem[status] = 0
+    contagem = contagem[SITUACOES_WHATSAPP].reset_index()
+
+    contagem["total"] = contagem[SITUACOES_WHATSAPP].sum(axis=1)
+    contagem["taxa_entrega"] = contagem.apply(
+        lambda r: taxa(r["Entregue"] + r["Lido"], r["total"]), axis=1
+    )
+    contagem["taxa_leitura"] = contagem.apply(lambda r: taxa(r["Lido"], r["total"]), axis=1)
+    contagem["taxa_falha"] = contagem.apply(
+        lambda r: taxa(r["Nao Entregue"] + r["Nao Enviado"], r["total"]), axis=1
+    )
+    return contagem
+
+
+def agregar_whatsapp_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
+    """Resultado de WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
+    grupo_ab, ordenado por prioridade P1_MAXIMA -> P4_BAIXA -> Não Classificado."""
+    agrupado = _agregar_whatsapp_por(df, "grupo_ab")
+    if agrupado.empty:
+        return agrupado
+    agrupado["ordem"] = agrupado["grupo_ab"].apply(
+        lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
+    )
+    return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
+def agregar_whatsapp_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
+    """Resultado de WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
+    grupo_estrategico, ordenado pela numeração do próprio grupo."""
+    agrupado = _agregar_whatsapp_por(df, "grupo_estrategico")
+    if agrupado.empty:
+        return agrupado
+    agrupado["ordem"] = agrupado["grupo_estrategico"].apply(
+        lambda g: GRUPO_ESTRATEGICO_ORDEM.index(g) if g in GRUPO_ESTRATEGICO_ORDEM else len(GRUPO_ESTRATEGICO_ORDEM)
+    )
+    return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
 def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:

@@ -11,6 +11,7 @@ from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
+    agregar_whatsapp_por_grupo_ab, agregar_whatsapp_por_grupo_estrategico,
     calcular_funil, calcular_funil_whatsapp, calcular_kpis, calcular_kpis_whatsapp,
     carregar_dados_crm, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
     filtrar_dados, filtrar_dados_whatsapp, montar_pivot_crm,
@@ -28,6 +29,16 @@ COLUNAS_TABELA_EXECUTIVA = [
 COLUNAS_TABELA_GRUPO_AB = [
     "Grupo AB", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
     "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_WHATSAPP_GRUPO_AB = [
+    "Grupo AB", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO = [
+    "Grupo Estratégico", "Total", "Entregue", "Lido", "Enviado", "Não Entregue", "Não Enviado",
+    "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
 ]
 
 COLUNAS_TABELA_FRASE = [
@@ -282,9 +293,13 @@ def registrar_callbacks(app):
         Output("grafico-volume-grupo-ab", "figure"),
         Output("grafico-taxa-entrega-grupo-ab", "figure"),
         Output("tabela-grupo-ab-container", "children"),
+        Output("grafico-whatsapp-grupo-ab", "figure"),
+        Output("tabela-whatsapp-grupo-ab-container", "children"),
         Output("grafico-volume-grupo-estrategico", "figure"),
         Output("grafico-taxa-entrega-grupo-estrategico", "figure"),
         Output("tabela-grupo-estrategico-container", "children"),
+        Output("grafico-whatsapp-grupo-estrategico", "figure"),
+        Output("tabela-whatsapp-grupo-estrategico-container", "children"),
         Output("grafico-taxa-entrega-frase", "figure"),
         Output("grafico-crm-frase", "figure"),
         Output("tabela-frase-container", "children"),
@@ -330,10 +345,13 @@ def registrar_callbacks(app):
         whatsapp_completo = carregar_dados_whatsapp_mensagem()
         whatsapp_filtrado = filtrar_dados_whatsapp(
             whatsapp_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
-            hora_ini=hora_ini, hora_fim=hora_fim,
+            hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
         )
         kpis_whatsapp = calcular_kpis_whatsapp(whatsapp_filtrado)
         etapas_whatsapp = calcular_funil_whatsapp(kpis_whatsapp)
+        agregado_whatsapp_grupo_ab = agregar_whatsapp_por_grupo_ab(whatsapp_filtrado)
+        agregado_whatsapp_grupo_estrategico = agregar_whatsapp_por_grupo_estrategico(whatsapp_filtrado)
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
@@ -404,9 +422,19 @@ def registrar_callbacks(app):
             charts.grafico_volume_grupo_ab(filtrado),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
+            charts.grafico_whatsapp_por_grupo_ab(agregado_whatsapp_grupo_ab),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_grupo_ab(agregado_whatsapp_grupo_ab),
+                COLUNAS_TABELA_WHATSAPP_GRUPO_AB,
+            ),
             charts.grafico_volume_grupo_estrategico(filtrado),
             charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico),
             _tabela_grupo_estrategico_ab_component(linhas_grupo_estrategico_ab),
+            charts.grafico_whatsapp_por_grupo_estrategico(agregado_whatsapp_grupo_estrategico),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_grupo_estrategico(agregado_whatsapp_grupo_estrategico),
+                COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO,
+            ),
             charts.grafico_taxa_entrega_frase(agregado_frase),
             charts.grafico_crm_por_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),

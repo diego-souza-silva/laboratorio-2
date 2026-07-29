@@ -444,6 +444,72 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
     return registros
 
 
+def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Resultado de WhatsApp por Grupo AB (sem dados no período)")
+
+    rotulos = [GRUPO_AB_LABEL.get(g, g) for g in agregado["grupo_ab"]]
+    fig = go.Figure()
+    for status in SITUACOES_WHATSAPP:
+        fig.add_trace(go.Bar(
+            x=rotulos, y=agregado[status], name=_NOMES_SITUACAO_WHATSAPP[status],
+            marker_color=_CORES_SITUACAO_WHATSAPP[status],
+        ))
+    fig.update_layout(barmode="stack")
+    return _layout_base(fig, "Resultado de WhatsApp por Grupo AB")
+
+
+def grafico_whatsapp_por_grupo_estrategico(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Resultado de WhatsApp por Grupo Estratégico (sem dados no período)")
+
+    rotulos = [GRUPO_ESTRATEGICO_LABEL.get(g, g) for g in agregado["grupo_estrategico"]]
+    fig = go.Figure()
+    for status in SITUACOES_WHATSAPP:
+        fig.add_trace(go.Bar(
+            x=rotulos, y=agregado[status], name=_NOMES_SITUACAO_WHATSAPP[status],
+            marker_color=_CORES_SITUACAO_WHATSAPP[status],
+        ))
+    fig.update_layout(barmode="stack")
+    return _layout_base(fig, "Resultado de WhatsApp por Grupo Estratégico")
+
+
+def formatar_tabela_whatsapp_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "Grupo AB": linha["grupo_ab"],
+            "Total": formatar_numero(linha["total"]),
+            "Entregue": formatar_numero(linha["Entregue"]),
+            "Lido": formatar_numero(linha["Lido"]),
+            "Enviado": formatar_numero(linha["Enviado"]),
+            "Não Entregue": formatar_numero(linha["Nao Entregue"]),
+            "Não Enviado": formatar_numero(linha["Nao Enviado"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Leitura": formatar_percentual(linha["taxa_leitura"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
+
+
+def formatar_tabela_whatsapp_grupo_estrategico(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "Grupo Estratégico": GRUPO_ESTRATEGICO_LABEL.get(linha["grupo_estrategico"], linha["grupo_estrategico"]),
+            "Total": formatar_numero(linha["total"]),
+            "Entregue": formatar_numero(linha["Entregue"]),
+            "Lido": formatar_numero(linha["Lido"]),
+            "Enviado": formatar_numero(linha["Enviado"]),
+            "Não Entregue": formatar_numero(linha["Nao Entregue"]),
+            "Não Enviado": formatar_numero(linha["Nao Enviado"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Leitura": formatar_percentual(linha["taxa_leitura"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
+
+
 def grafico_funil_crm(crm_agregado: pd.DataFrame, rotulo_canal: str = "Pós-Contato") -> go.Figure:
     if crm_agregado.empty:
         return _layout_base(go.Figure(), f"Conversão {rotulo_canal} (sem dados no período)")

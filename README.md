@@ -134,6 +134,11 @@ viram `Não Classificado`.
   campanha/UTM ele recebeu. Filtro global "Grupo Estratégico" e aba própria "Funil por
   Grupo Estratégico".
 
+Nas duas abas, abaixo do bloco de SMS tem também o **Resultado de WhatsApp** por
+grupo_ab/grupo_estrategico (Entregue/Lido/Enviado/Não Entregue/Não Enviado), na mesma
+lógica de vínculo por telefone usada no Funil de WhatsApp da aba Funil Geral — aparece
+ao selecionar uma campanha de WhatsApp no filtro "Campanha (UTM)".
+
 ## Resultado por Frase (SMS)
 
 Cada SMS enviado tem um link único por cliente (ex.: `.../8knbP2`), então agrupar pelo

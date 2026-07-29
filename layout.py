@@ -35,7 +35,7 @@ def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
 def _linha_kpis() -> html.Div:
     cartoes_sms = [
         ("kpi-disparado", "Total Disparado", "bi-send-fill", "#8B93B8"),
-        ("kpi-enviado", "Total Enviado", "bi-paper-plane-fill", "#3DA9FC"),
+        ("kpi-enviado", "Total Enviado", "bi-send-check-fill", "#3DA9FC"),
         ("kpi-entregue", "Total Entregue", "bi-check-circle-fill", "#2ECC71"),
         ("kpi-falhado", "Total Falhado", "bi-x-circle-fill", "#FF5C5C"),
         ("kpi-taxa-envio", "Taxa de Envio", "bi-graph-up", "#3DA9FC"),
@@ -45,7 +45,7 @@ def _linha_kpis() -> html.Div:
     cartoes_whatsapp = [
         ("kpi-whatsapp-entregue", "Entregue", "bi-check-circle-fill", "#2ECC71"),
         ("kpi-whatsapp-lido", "Lido", "bi-eye-fill", "#2ECC71"),
-        ("kpi-whatsapp-enviado", "Enviado", "bi-paper-plane-fill", "#F5A623"),
+        ("kpi-whatsapp-enviado", "Enviado", "bi-send-check-fill", "#F5A623"),
         ("kpi-whatsapp-nao-entregue", "Não Entregue", "bi-x-circle-fill", "#FF5C5C"),
         ("kpi-whatsapp-nao-enviado", "Não Enviado", "bi-dash-circle-fill", "#8B93B8"),
     ]
@@ -215,6 +215,7 @@ def _aba_grupo_ab() -> html.Div:
             ],
             color="info", className="mb-3",
         ),
+        html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row([
             dbc.Col(_grafico_card("Volume por Grupo AB", "grafico-volume-grupo-ab"), md=6),
             dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB", "grafico-taxa-entrega-grupo-ab"), md=6),
@@ -223,6 +224,24 @@ def _aba_grupo_ab() -> html.Div:
             dbc.CardBody([
                 html.H6("Tabela Executiva por Grupo AB", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-3",
+        ),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-whatsapp me-2"),
+                "Resultado de WhatsApp (Otima/Airys) por grupo_ab — aparece ao selecionar "
+                "uma campanha de WhatsApp no filtro \"Campanha (UTM)\".",
+            ],
+            color="secondary", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB", "grafico-whatsapp-grupo-ab"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Grupo AB", className="mb-3"),
+                html.Div(id="tabela-whatsapp-grupo-ab-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -241,6 +260,7 @@ def _aba_grupo_estrategico() -> html.Div:
             ],
             color="info", className="mb-3",
         ),
+        html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row([
             dbc.Col(_grafico_card("Volume por Grupo Estratégico", "grafico-volume-grupo-estrategico"), md=6),
             dbc.Col(_grafico_card("Taxa de Entrega por Grupo Estratégico", "grafico-taxa-entrega-grupo-estrategico"), md=6),
@@ -249,6 +269,24 @@ def _aba_grupo_estrategico() -> html.Div:
             dbc.CardBody([
                 html.H6("Grupo Estratégico × Grupo AB (detalhado)", className="mb-3"),
                 html.Div(id="tabela-grupo-estrategico-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-3",
+        ),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-whatsapp me-2"),
+                "Resultado de WhatsApp (Otima/Airys) por grupo_estrategico — aparece ao "
+                "selecionar uma campanha de WhatsApp no filtro \"Campanha (UTM)\".",
+            ],
+            color="secondary", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo Estratégico", "grafico-whatsapp-grupo-estrategico"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Grupo Estratégico", className="mb-3"),
+                html.Div(id="tabela-whatsapp-grupo-estrategico-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
