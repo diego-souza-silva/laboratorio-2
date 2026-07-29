@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils import normalizar_telefone, parse_data_pt_br, taxa
+from utils import normalizar_frase, normalizar_telefone, parse_data_pt_br, taxa
 
 RAIZ_PROJETO = Path(__file__).parent
 DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
@@ -109,6 +109,9 @@ ETAPAS_CRM_NUMERO = {
 
 NAO_CLASSIFICADO = "Não Classificado"
 GRUPO_AB_ORDEM = ["P1_MAXIMA", "P2_ALTA", "P3_MEDIA", "P4_BAIXA", NAO_CLASSIFICADO]
+GRUPO_ESTRATEGICO_ORDEM = [
+    "2_ABANDONO_CARRINHO", "3_CADASTRADO", "4_ENGAJADO", "5_TOPO_FUNIL", NAO_CLASSIFICADO,
+]
 
 UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "email"]
 
@@ -169,15 +172,33 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
     disparo_bruto = ler_csv_auto(disparo_path)
     disparo, tipo_identificador = _preparar_disparo(disparo_bruto)
 
-    # Alguns disparos (Airys/Otima/Salesforce) já vêm com grupo_ab embutido na própria
-    # base — mais confiável do que recalcular pelo cruzamento de telefone, então tem
-    # prioridade sobre o mapa da base de segmentação.
+    # Alguns disparos (Airys/Otima/Salesforce) já vêm com grupo_ab/grupo_estrategico
+    # embutidos na própria base — mais confiável do que recalcular pelo cruzamento de
+    # telefone, então tem prioridade sobre o mapa da base de segmentação.
     grupo_ab_arquivo = None
     if "grupo_ab" in disparo.columns:
         grupo_ab_arquivo = disparo[["identificador_norm", "grupo_ab"]].rename(
             columns={"grupo_ab": "grupo_ab_arquivo"}
         )
         grupo_ab_arquivo["grupo_ab_arquivo"] = grupo_ab_arquivo["grupo_ab_arquivo"].str.upper()
+
+    grupo_estrategico_arquivo = None
+    if "grupo_estrategico" in disparo.columns:
+        grupo_estrategico_arquivo = disparo[["identificador_norm", "grupo_estrategico"]].rename(
+            columns={"grupo_estrategico": "grupo_estrategico_arquivo"}
+        )
+        grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = (
+            grupo_estrategico_arquivo["grupo_estrategico_arquivo"].str.upper()
+        )
+
+    # A frase do SMS (com link único por cliente) vem do próprio arquivo de disparo,
+    # disponível pra 100% das linhas — diferente da "mensagem" do retorno, que só
+    # existe pra quem já tem status confirmado.
+    frase_disparo = None
+    if "frase" in disparo.columns:
+        frase_disparo = disparo[["identificador_norm", "frase"]].rename(
+            columns={"frase": "frase_disparo"}
+        )
 
     if retorno_path is not None and tipo_identificador == "telefone":
         retorno = ler_csv_auto(retorno_path)
@@ -200,37 +221,70 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
     else:
         eventos["grupo_ab_arquivo"] = None
 
+    if grupo_estrategico_arquivo is not None:
+        eventos = eventos.merge(grupo_estrategico_arquivo, on="identificador_norm", how="left")
+    else:
+        eventos["grupo_estrategico_arquivo"] = None
+
+    if frase_disparo is not None:
+        eventos = eventos.merge(frase_disparo, on="identificador_norm", how="left")
+    else:
+        eventos["frase_disparo"] = None
+
     eventos["utm_campaign"] = utm
     eventos["status_raw"] = eventos["status_raw"].fillna("nao_processado")
     return eventos
 
 
-def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
-    """Monta o mapa telefone -> grupo_ab a partir da base de segmentação em
-    `ARQUIVO DA BASE INTEIRA/` (equivalente ao PROCX manual: explode as colunas
-    FONE_1..FONE_4 e associa cada telefone ao grupo_ab da linha do cliente). Lê todo
-    `.csv` da pasta — se sobrar mais de um (ex.: versão antiga não apagada), deduplica
-    por CPF mantendo a última."""
-    if not forcar_reload and "grupo_ab_mapa" in _cache:
-        return _cache["grupo_ab_mapa"]
+def _carregar_base_segmentacao(forcar_reload: bool = False) -> pd.DataFrame:
+    """Lê e cacheia a base de clientes em `ARQUIVO DA BASE INTEIRA/` (todo `.csv` da
+    pasta, deduplicado por CPF mantendo a linha mais recente). Fonte compartilhada
+    pelos mapas de grupo_ab e grupo_estrategico, pra não ler o arquivo duas vezes."""
+    if not forcar_reload and "base_segmentacao" in _cache:
+        return _cache["base_segmentacao"]
 
     arquivos = sorted(DIR_BASE_GRUPO_AB.glob("*.csv"))
     if not arquivos:
-        _cache["grupo_ab_mapa"] = {}
+        base = pd.DataFrame()
+    else:
+        base = pd.concat([ler_csv_auto(a) for a in arquivos], ignore_index=True)
+        if "cpf" in base.columns:
+            base = base.drop_duplicates("cpf", keep="last")
+
+    _cache["base_segmentacao"] = base
+    return base
+
+
+def _montar_mapa_telefone(base: pd.DataFrame, coluna_valor: str) -> dict:
+    if base.empty or coluna_valor not in base.columns:
         return {}
-
-    base = pd.concat([ler_csv_auto(a) for a in arquivos], ignore_index=True)
-    if "cpf" in base.columns:
-        base = base.drop_duplicates("cpf", keep="last")
-
     colunas_fone = [c for c in base.columns if c.startswith("fone_")]
-    partes = [base[[coluna, "grupo_ab"]].rename(columns={coluna: "fone"}) for coluna in colunas_fone]
+    partes = [base[[coluna, coluna_valor]].rename(columns={coluna: "fone"}) for coluna in colunas_fone]
     longo = pd.concat(partes, ignore_index=True)
     longo["fone_norm"] = longo["fone"].apply(normalizar_telefone)
     longo = longo[longo["fone_norm"] != ""].drop_duplicates("fone_norm", keep="first")
+    return dict(zip(longo["fone_norm"], longo[coluna_valor]))
 
-    mapa = dict(zip(longo["fone_norm"], longo["grupo_ab"]))
+
+def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
+    """Monta o mapa telefone -> grupo_ab a partir da base de segmentação (equivalente
+    ao PROCX manual: explode as colunas FONE_1..FONE_4 e associa cada telefone ao
+    grupo_ab da linha do cliente)."""
+    if not forcar_reload and "grupo_ab_mapa" in _cache:
+        return _cache["grupo_ab_mapa"]
+    mapa = _montar_mapa_telefone(_carregar_base_segmentacao(forcar_reload), "grupo_ab")
     _cache["grupo_ab_mapa"] = mapa
+    return mapa
+
+
+def carregar_mapa_grupo_estrategico(forcar_reload: bool = False) -> dict:
+    """Monta o mapa telefone -> grupo_estrategico (2_ABANDONO_CARRINHO, 3_CADASTRADO,
+    4_ENGAJADO, 5_TOPO_FUNIL) a partir da mesma base de segmentação, pelo mesmo
+    cruzamento por telefone usado no grupo_ab."""
+    if not forcar_reload and "grupo_estrategico_mapa" in _cache:
+        return _cache["grupo_estrategico_mapa"]
+    mapa = _montar_mapa_telefone(_carregar_base_segmentacao(forcar_reload), "grupo_estrategico")
+    _cache["grupo_estrategico_mapa"] = mapa
     return mapa
 
 
@@ -260,6 +314,17 @@ def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     grupo_ab_telefone = df["telefone_norm"].map(mapa_grupo_ab)
     df["grupo_ab"] = df["grupo_ab_arquivo"].combine_first(grupo_ab_telefone).fillna(NAO_CLASSIFICADO)
     df = df.drop(columns="grupo_ab_arquivo")
+
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
+    grupo_estrategico_telefone = df["telefone_norm"].map(mapa_grupo_estrategico)
+    df["grupo_estrategico"] = (
+        df["grupo_estrategico_arquivo"].combine_first(grupo_estrategico_telefone).fillna(NAO_CLASSIFICADO)
+    )
+    df = df.drop(columns="grupo_estrategico_arquivo")
+
+    df["frase"] = df["frase_disparo"].combine_first(df["mensagem"])
+    df["frase_norm"] = df["frase"].apply(normalizar_frase)
+    df = df.drop(columns="frase_disparo")
 
     _cache["sms"] = df
     return df
@@ -324,6 +389,7 @@ def filtrar_dados(
     hora_fim: int | None = None,
     status: list[str] | None = None,
     grupos_ab: list[str] | None = None,
+    grupos_estrategicos: list[str] | None = None,
 ) -> pd.DataFrame:
     """Aplica os filtros globais do dashboard sobre o dataframe de eventos de SMS."""
     filtrado = df
@@ -333,6 +399,8 @@ def filtrar_dados(
         filtrado = filtrado[filtrado["status_funil"].isin(status)]
     if grupos_ab:
         filtrado = filtrado[filtrado["grupo_ab"].isin(grupos_ab)]
+    if grupos_estrategicos:
+        filtrado = filtrado[filtrado["grupo_estrategico"].isin(grupos_estrategicos)]
     if data_ini is not None and data_fim is not None:
         no_periodo = filtrado["data"].isna() | (
             (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
@@ -428,6 +496,35 @@ def agregar_por_grupo_ab(df: pd.DataFrame) -> pd.DataFrame:
         lambda g: GRUPO_AB_ORDEM.index(g) if g in GRUPO_AB_ORDEM else len(GRUPO_AB_ORDEM)
     )
     return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
+def agregar_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por grupo_estrategico (2_ABANDONO_CARRINHO, 3_CADASTRADO, 4_ENGAJADO,
+    5_TOPO_FUNIL), ordenada pela numeração do próprio grupo."""
+    agrupado = _agregar_por(df, "grupo_estrategico")
+    agrupado["ordem"] = agrupado["grupo_estrategico"].apply(
+        lambda g: GRUPO_ESTRATEGICO_ORDEM.index(g) if g in GRUPO_ESTRATEGICO_ORDEM else len(GRUPO_ESTRATEGICO_ORDEM)
+    )
+    return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
+
+
+def agregar_por_frase(df: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por frase de SMS (modelo de mensagem, sem o link único de cada cliente),
+    ordenada da maior para a menor volumetria disparada. Só considera linhas com frase
+    conhecida (campanhas de SMS com o texto no arquivo de disparo ou no retorno)."""
+    validas = df[df["frase_norm"] != ""]
+    if validas.empty:
+        return _agregar_por(validas, "frase_norm")
+
+    agrupado = _agregar_por(validas, "frase_norm")
+    campanhas_por_frase = (
+        validas.groupby("frase_norm")["utm_campaign"]
+        .agg(lambda s: sorted(set(s)))
+        .rename("campanhas")
+        .reset_index()
+    )
+    agrupado = agrupado.merge(campanhas_por_frase, on="frase_norm", how="left")
+    return agrupado.sort_values("total_disparado", ascending=False).reset_index(drop=True)
 
 
 def _agregar_crm_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:

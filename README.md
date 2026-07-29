@@ -89,14 +89,30 @@ convivem lado a lado, e o filtro de Data/Hora serve para comparar ou isolar cada
 Não há coluna de operadora (Claro/Vivo/TIM/Oi) em nenhum arquivo, então essa seção não foi
 incluída no dashboard.
 
-## Segmentação por Grupo AB
+## Segmentação por Grupo AB e Grupo Estratégico
 
 `ARQUIVO DA BASE INTEIRA/` tem a base de clientes (uma linha por CPF, com colunas
-`FONE_1`..`FONE_4` e `grupo_ab`). Como os arquivos de SMS só têm telefone (não têm CPF), o
-cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4` são explodidas em formato
-longo e viram um mapa `telefone -> grupo_ab` (equivalente ao PROCX/VLOOKUP manual "doc por
-doc"), aplicado depois a cada evento de SMS e a cada linha do log de CRM. Telefones que não
-aparecem na base viram `Não Classificado`. Isso alimenta o filtro global "Grupo AB", a aba
-"Funil por Grupo AB" (volume, taxa de entrega e tabela executiva por `P1_MAXIMA`,
-`P2_ALTA`, `P3_MEDIA`, `P4_BAIXA`) e a tabela dinâmica Ação × Campanha × Grupo AB na aba de
-Conversão Pós-Contato.
+`FONE_1`..`FONE_4`, `grupo_ab` e `grupo_estrategico`). Como os arquivos de SMS só têm
+telefone (não têm CPF), o cruzamento é feito por telefone: as colunas `FONE_1`..`FONE_4`
+são explodidas em formato longo e viram mapas `telefone -> grupo_ab` e
+`telefone -> grupo_estrategico` (equivalente ao PROCX/VLOOKUP manual "doc por doc"),
+aplicados depois a cada evento de SMS e a cada linha do log de CRM. Quando o próprio
+arquivo de disparo já traz uma dessas colunas (caso de Airys/Otima/Salesforce), o valor do
+arquivo tem prioridade sobre o cruzamento. Telefones não encontrados em nenhum dos dois
+viram `Não Classificado`.
+
+- **Grupo AB** (`P1_MAXIMA`..`P4_BAIXA`) — segmentação de propensão. Filtro global "Grupo
+  AB", aba "Funil por Grupo AB" e coluna na tabela dinâmica de Conversão Pós-Contato.
+- **Grupo Estratégico** (`2_ABANDONO_CARRINHO`, `3_CADASTRADO`, `4_ENGAJADO`,
+  `5_TOPO_FUNIL`) — categorização de funil do cliente na base, independente de qual
+  campanha/UTM ele recebeu. Filtro global "Grupo Estratégico" e aba própria "Funil por
+  Grupo Estratégico".
+
+## Resultado por Frase (SMS)
+
+Cada SMS enviado tem um link único por cliente (ex.: `.../8knbP2`), então agrupar pelo
+texto bruto criaria um grupo por linha. A aba "Resultado por Frase (SMS)" substitui o link
+por um marcador fixo (`{link}`) antes de agrupar, comparando o desempenho de cada
+texto-modelo de mensagem — mesmo que ele seja reutilizado em campanhas diferentes. Só
+considera campanhas cujo arquivo de disparo tem a frase (`ARQUIVOS PARA DISPAROS/{utm}.csv`
+com coluna `frase`), ou seja, hoje é específico do canal SMS/Kolmeya.

@@ -5,10 +5,10 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, STATUS_FUNIL_ORDEM, carregar_dados_sms,
-    extremos_data_hora, ler_diario_estrategia,
+    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, STATUS_FUNIL_ORDEM,
+    carregar_dados_sms, extremos_data_hora, ler_diario_estrategia,
 )
-from charts import GRUPO_AB_LABEL, nome_curto
+from charts import GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, nome_curto
 
 STATUS_LABEL = {
     "Entregue": "Entregue",
@@ -100,6 +100,18 @@ def _painel_filtros() -> dbc.Card:
                         className="dash-dropdown-escuro",
                     ),
                 ], md=6),
+                dbc.Col([
+                    html.Label("Grupo Estratégico", className="rotulo-filtro"),
+                    dcc.Dropdown(
+                        id="filtro-grupo-estrategico",
+                        options=[
+                            {"label": GRUPO_ESTRATEGICO_LABEL.get(g, g), "value": g}
+                            for g in GRUPO_ESTRATEGICO_ORDEM
+                        ],
+                        value=GRUPO_ESTRATEGICO_ORDEM, multi=True, placeholder="Todos os grupos",
+                        className="dash-dropdown-escuro",
+                    ),
+                ], md=6),
             ], className="g-3 align-items-end mt-1"),
             html.P(
                 "Números de disparo sem confirmação de horário na plataforma (\"Não Processado\") "
@@ -179,6 +191,57 @@ def _aba_grupo_ab() -> html.Div:
             dbc.CardBody([
                 html.H6("Tabela Executiva por Grupo AB", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
+    ])
+
+
+def _aba_grupo_estrategico() -> html.Div:
+    return html.Div([
+        dbc.Alert(
+            [
+                html.I(className="bi bi-info-circle-fill me-2"),
+                "Grupo Estratégico (Abandono Carrinho / Cadastrado / Engajado / Topo de "
+                "Funil) trazido da base de clientes via cruzamento por telefone, ou direto "
+                "do arquivo de disparo quando ele já traz essa coluna. Telefones não "
+                "encontrados na base aparecem como \"Não Classificado\".",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Volume por Grupo Estratégico", "grafico-volume-grupo-estrategico"), md=6),
+            dbc.Col(_grafico_card("Taxa de Entrega por Grupo Estratégico", "grafico-taxa-entrega-grupo-estrategico"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Grupo Estratégico", className="mb-3"),
+                html.Div(id="tabela-grupo-estrategico-container"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
+    ])
+
+
+def _aba_frases() -> html.Div:
+    return html.Div([
+        dbc.Alert(
+            [
+                html.I(className="bi bi-info-circle-fill me-2"),
+                "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
+                "as mensagens são agrupadas pelo texto-modelo (sem o link) para comparar o "
+                "desempenho de cada modelo de mensagem, mesmo que reaparecça em campanhas "
+                "diferentes.",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Taxa de Entrega por Frase", "grafico-taxa-entrega-frase", altura="420px"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Frase (SMS)", className="mb-3"),
+                html.Div(id="tabela-frase-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -293,6 +356,10 @@ def criar_layout() -> html.Div:
                             className="aba-botao aba-ativa"),
                 html.Button("Funil por Grupo AB", id="btn-tab-grupo", n_clicks=0,
                             className="aba-botao"),
+                html.Button("Funil por Grupo Estratégico", id="btn-tab-grupo-estrategico", n_clicks=0,
+                            className="aba-botao"),
+                html.Button("Resultado por Frase (SMS)", id="btn-tab-frases", n_clicks=0,
+                            className="aba-botao"),
                 html.Button("Conversão Pós-Contato (CRM)", id="btn-tab-crm", n_clicks=0,
                             className="aba-botao"),
                 html.Button("Diário / Estratégia", id="btn-tab-diario", n_clicks=0,
@@ -301,6 +368,8 @@ def criar_layout() -> html.Div:
 
             html.Div(_aba_funil_sms(), id="painel-tab-sms"),
             html.Div(_aba_grupo_ab(), id="painel-tab-grupo", style={"display": "none"}),
+            html.Div(_aba_grupo_estrategico(), id="painel-tab-grupo-estrategico", style={"display": "none"}),
+            html.Div(_aba_frases(), id="painel-tab-frases", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
             html.Div(_aba_diario(), id="painel-tab-diario", style={"display": "none"}),
             dcc.Store(id="canal-crm-ativo", data="sms"),

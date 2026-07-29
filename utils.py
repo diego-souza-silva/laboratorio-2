@@ -17,6 +17,17 @@ _DATA_PT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LINK_RE = re.compile(r"https?://\S+")
+
+
+def normalizar_frase(mensagem) -> str:
+    """Reduz a frase de SMS ao seu texto-modelo: cada envio tem um link curto único por
+    cliente (ex.: .../8knbP2), então sem isso cada linha viraria um grupo próprio.
+    Substitui o link por um marcador fixo pra agrupar por modelo de mensagem."""
+    if not isinstance(mensagem, str) or not mensagem.strip():
+        return ""
+    return _LINK_RE.sub("{link}", mensagem).strip()
+
 
 def strip_accents(texto: str) -> str:
     if not isinstance(texto, str):

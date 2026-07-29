@@ -6,7 +6,7 @@ import re
 import pandas as pd
 import plotly.graph_objects as go
 
-from data_processing import ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM
+from data_processing import ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM
 from utils import formatar_numero, formatar_percentual
 
 CORES = {
@@ -37,6 +37,14 @@ GRUPO_AB_LABEL = {
     "P2_ALTA": "P2 · Alta",
     "P3_MEDIA": "P3 · Média",
     "P4_BAIXA": "P4 · Baixa",
+    "Não Classificado": "Não Classificado",
+}
+
+GRUPO_ESTRATEGICO_LABEL = {
+    "2_ABANDONO_CARRINHO": "Abandono Carrinho",
+    "3_CADASTRADO": "Cadastrado",
+    "4_ENGAJADO": "Engajado",
+    "5_TOPO_FUNIL": "Topo de Funil",
     "Não Classificado": "Não Classificado",
 }
 
@@ -248,6 +256,103 @@ def formatar_tabela_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
     for _, linha in agregado.iterrows():
         registros.append({
             "Grupo AB": linha["grupo_ab"],
+            "Total Disparado": formatar_numero(linha["total_disparado"]),
+            "Total Enviado": formatar_numero(linha["total_enviado"]),
+            "Total Entregue": formatar_numero(linha["total_entregue"]),
+            "Total Falhado": formatar_numero(linha["total_falhado"]),
+            "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
+
+
+def grafico_volume_grupo_estrategico(df: pd.DataFrame) -> go.Figure:
+    if df.empty:
+        return _layout_base(go.Figure(), "Volume por Grupo Estratégico (sem dados no período)")
+
+    ordem = [g for g in GRUPO_ESTRATEGICO_ORDEM if g in df["grupo_estrategico"].unique()]
+    agrupado = df.groupby("grupo_estrategico")[["disparado", "enviado", "entregue", "falhou"]].sum().reindex(ordem)
+    rotulos = [GRUPO_ESTRATEGICO_LABEL.get(g, g) for g in agrupado.index]
+
+    fig = go.Figure()
+    for coluna, rotulo, chave_cor in [
+        ("disparado", "Disparado", "disparado"), ("enviado", "Enviado", "enviado"),
+        ("entregue", "Entregue", "entregue"), ("falhou", "Falhou", "falhou"),
+    ]:
+        fig.add_trace(go.Bar(x=rotulos, y=agrupado[coluna], name=rotulo, marker_color=CORES[chave_cor]))
+    fig.update_layout(barmode="group")
+    return _layout_base(fig, "Volume por Grupo Estratégico")
+
+
+def grafico_taxa_entrega_grupo_estrategico(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Taxa de Entrega por Grupo Estratégico (sem dados no período)")
+
+    ordenado = agregado.iloc[::-1]
+    rotulos = [GRUPO_ESTRATEGICO_LABEL.get(g, g) for g in ordenado["grupo_estrategico"]]
+    fig = go.Figure(
+        go.Bar(
+            y=rotulos, x=ordenado["taxa_entrega"], orientation="h",
+            marker_color=CORES["entregue"],
+            text=[formatar_percentual(v) for v in ordenado["taxa_entrega"]],
+            textposition="outside",
+            hovertemplate="%{y}<br>Taxa de Entrega: %{x:.1f}%<extra></extra>",
+        )
+    )
+    fig.update_xaxes(range=[0, 100])
+    return _layout_base(fig, "Taxa de Entrega por Grupo Estratégico")
+
+
+def formatar_tabela_grupo_estrategico(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "Grupo Estratégico": GRUPO_ESTRATEGICO_LABEL.get(linha["grupo_estrategico"], linha["grupo_estrategico"]),
+            "Total Disparado": formatar_numero(linha["total_disparado"]),
+            "Total Enviado": formatar_numero(linha["total_enviado"]),
+            "Total Entregue": formatar_numero(linha["total_entregue"]),
+            "Total Falhado": formatar_numero(linha["total_falhado"]),
+            "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+    return registros
+
+
+def _truncar_frase(frase: str, limite: int = 90) -> str:
+    if not isinstance(frase, str):
+        return ""
+    return frase if len(frase) <= limite else frase[: limite - 1].rstrip() + "…"
+
+
+def grafico_taxa_entrega_frase(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Taxa de Entrega por Frase (sem dados no período)")
+
+    ordenado = agregado.sort_values("taxa_entrega")
+    rotulos = [_truncar_frase(f, 55) for f in ordenado["frase_norm"]]
+    fig = go.Figure(
+        go.Bar(
+            y=rotulos, x=ordenado["taxa_entrega"], orientation="h",
+            marker_color=CORES["entregue"],
+            text=[formatar_percentual(v) for v in ordenado["taxa_entrega"]],
+            textposition="outside",
+            hovertemplate="%{y}<br>Taxa de Entrega: %{x:.1f}%<extra></extra>",
+        )
+    )
+    fig.update_xaxes(range=[0, 100])
+    altura = max(280, 70 * len(ordenado))
+    return _layout_base(fig, "Taxa de Entrega por Frase (SMS)", altura=altura)
+
+
+def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        campanhas = linha.get("campanhas") or []
+        registros.append({
+            "Frase (modelo)": _truncar_frase(linha["frase_norm"], 140),
+            "Campanha(s)": ", ".join(nome_curto(u) for u in campanhas),
             "Total Disparado": formatar_numero(linha["total_disparado"]),
             "Total Enviado": formatar_numero(linha["total_enviado"]),
             "Total Entregue": formatar_numero(linha["total_entregue"]),

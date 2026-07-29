@@ -9,9 +9,9 @@ from dash import Input, Output, State, ctx, dash_table, html
 import charts
 from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
-    agregar_por_campanha, agregar_por_grupo_ab, calcular_funil, calcular_kpis,
-    carregar_dados_crm, carregar_dados_sms, filtrar_dados, montar_pivot_crm,
-    salvar_diario_estrategia,
+    agregar_por_campanha, agregar_por_frase, agregar_por_grupo_ab,
+    agregar_por_grupo_estrategico, calcular_funil, calcular_kpis, carregar_dados_crm,
+    carregar_dados_sms, filtrar_dados, montar_pivot_crm, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -25,6 +25,16 @@ COLUNAS_TABELA_EXECUTIVA = [
 COLUNAS_TABELA_GRUPO_AB = [
     "Grupo AB", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
     "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_GRUPO_ESTRATEGICO = [
+    "Grupo Estratégico", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
+    "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+]
+
+COLUNAS_TABELA_FRASE = [
+    "Frase (modelo)", "Campanha(s)", "Total Disparado", "Total Enviado", "Total Entregue",
+    "Total Falhado", "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
 ]
 
 
@@ -127,30 +137,22 @@ def _tabela_pivot_crm_component(colunas_utm: list[str], linhas: list[dict]):
 
 
 def registrar_callbacks(app):
+    ABAS = ["sms", "grupo", "grupo-estrategico", "frases", "crm", "diario"]
+
     @app.callback(
-        Output("painel-tab-sms", "style"),
-        Output("painel-tab-grupo", "style"),
-        Output("painel-tab-crm", "style"),
-        Output("painel-tab-diario", "style"),
-        Output("btn-tab-sms", "className"),
-        Output("btn-tab-grupo", "className"),
-        Output("btn-tab-crm", "className"),
-        Output("btn-tab-diario", "className"),
-        Input("btn-tab-sms", "n_clicks"),
-        Input("btn-tab-grupo", "n_clicks"),
-        Input("btn-tab-crm", "n_clicks"),
-        Input("btn-tab-diario", "n_clicks"),
+        [Output(f"painel-tab-{aba}", "style") for aba in ABAS],
+        [Output(f"btn-tab-{aba}", "className") for aba in ABAS],
+        [Input(f"btn-tab-{aba}", "n_clicks") for aba in ABAS],
     )
-    def alternar_aba(_n_sms, _n_grupo, _n_crm, _n_diario):
+    def alternar_aba(*_cliques):
         oculto, visivel = {"display": "none"}, {"display": "block"}
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
-        if ctx.triggered_id == "btn-tab-grupo":
-            return oculto, visivel, oculto, oculto, inativo, ativo, inativo, inativo
-        if ctx.triggered_id == "btn-tab-crm":
-            return oculto, oculto, visivel, oculto, inativo, inativo, ativo, inativo
-        if ctx.triggered_id == "btn-tab-diario":
-            return oculto, oculto, oculto, visivel, inativo, inativo, inativo, ativo
-        return visivel, oculto, oculto, oculto, ativo, inativo, inativo, inativo
+        aba_ativa = "sms"
+        if ctx.triggered_id:
+            aba_ativa = ctx.triggered_id.replace("btn-tab-", "")
+        estilos = [visivel if aba == aba_ativa else oculto for aba in ABAS]
+        classes = [ativo if aba == aba_ativa else inativo for aba in ABAS]
+        return (*estilos, *classes)
 
     @app.callback(
         Output("status-salvar-diario", "children"),
@@ -201,6 +203,11 @@ def registrar_callbacks(app):
         Output("grafico-volume-grupo-ab", "figure"),
         Output("grafico-taxa-entrega-grupo-ab", "figure"),
         Output("tabela-grupo-ab-container", "children"),
+        Output("grafico-volume-grupo-estrategico", "figure"),
+        Output("grafico-taxa-entrega-grupo-estrategico", "figure"),
+        Output("tabela-grupo-estrategico-container", "children"),
+        Output("grafico-taxa-entrega-frase", "figure"),
+        Output("tabela-frase-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -215,11 +222,13 @@ def registrar_callbacks(app):
         Input("filtro-hora", "value"),
         Input("filtro-status", "value"),
         Input("filtro-grupo-ab", "value"),
+        Input("filtro-grupo-estrategico", "value"),
         Input("filtro-utm-crm", "value"),
         Input("canal-crm-ativo", "data"),
     )
     def atualizar_dashboard(
-        utms, data_ini, data_fim, faixa_hora, status, grupos_ab, utms_crm, canal_crm,
+        utms, data_ini, data_fim, faixa_hora, status, grupos_ab, grupos_estrategicos,
+        utms_crm, canal_crm,
     ):
         df_completo = carregar_dados_sms()
 
@@ -230,6 +239,7 @@ def registrar_callbacks(app):
         filtrado = filtrar_dados(
             df_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, status=status, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
         )
 
         kpis = calcular_kpis(filtrado)
@@ -237,6 +247,13 @@ def registrar_callbacks(app):
         agregado = agregar_por_campanha(filtrado) if not filtrado.empty else agregar_por_campanha(df_completo.iloc[0:0])
         agregado_grupo_ab = (
             agregar_por_grupo_ab(filtrado) if not filtrado.empty else agregar_por_grupo_ab(df_completo.iloc[0:0])
+        )
+        agregado_grupo_estrategico = (
+            agregar_por_grupo_estrategico(filtrado) if not filtrado.empty
+            else agregar_por_grupo_estrategico(df_completo.iloc[0:0])
+        )
+        agregado_frase = (
+            agregar_por_frase(filtrado) if not filtrado.empty else agregar_por_frase(df_completo.iloc[0:0])
         )
 
         legenda = (
@@ -281,6 +298,14 @@ def registrar_callbacks(app):
             charts.grafico_volume_grupo_ab(filtrado),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
+            charts.grafico_volume_grupo_estrategico(filtrado),
+            charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico),
+            _tabela_component(
+                charts.formatar_tabela_grupo_estrategico(agregado_grupo_estrategico),
+                COLUNAS_TABELA_GRUPO_ESTRATEGICO,
+            ),
+            charts.grafico_taxa_entrega_frase(agregado_frase),
+            _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),
