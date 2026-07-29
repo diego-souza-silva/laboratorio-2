@@ -508,6 +508,50 @@ def agregar_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
+def montar_tabela_grupo_estrategico_com_ab(df: pd.DataFrame) -> list[dict]:
+    """Monta a tabela Grupo Estratégico (subtotal) > Grupo AB (detalhe), com as mesmas
+    métricas do resto do dashboard (Disparado/Enviado/Entregue/Falhado/taxas) — mostra o
+    grupo_ab por dentro de cada grupo_estrategico."""
+    if df.empty:
+        return []
+
+    linhas = []
+    ordem_ge = [
+        g for g in GRUPO_ESTRATEGICO_ORDEM
+        if g in df["grupo_estrategico"].unique()
+    ]
+    for ge in ordem_ge:
+        sub_ge = df[df["grupo_estrategico"] == ge]
+        subtotal = agregar_por_grupo_ab(sub_ge)
+        if subtotal.empty:
+            continue
+
+        totais = subtotal[["total_disparado", "total_enviado", "total_entregue", "total_falhado"]].sum()
+        linhas.append({
+            "rotulo": ge, "nivel": "subtotal",
+            "total_disparado": int(totais["total_disparado"]),
+            "total_enviado": int(totais["total_enviado"]),
+            "total_entregue": int(totais["total_entregue"]),
+            "total_falhado": int(totais["total_falhado"]),
+            "taxa_envio": taxa(totais["total_enviado"], totais["total_disparado"]),
+            "taxa_entrega": taxa(totais["total_entregue"], totais["total_enviado"]),
+            "taxa_falha": taxa(totais["total_falhado"], totais["total_enviado"]),
+        })
+        for _, linha in subtotal.iterrows():
+            linhas.append({
+                "rotulo": linha["grupo_ab"], "nivel": "detalhe",
+                "total_disparado": int(linha["total_disparado"]),
+                "total_enviado": int(linha["total_enviado"]),
+                "total_entregue": int(linha["total_entregue"]),
+                "total_falhado": int(linha["total_falhado"]),
+                "taxa_envio": linha["taxa_envio"],
+                "taxa_entrega": linha["taxa_entrega"],
+                "taxa_falha": linha["taxa_falha"],
+            })
+
+    return linhas
+
+
 def agregar_por_frase(df: pd.DataFrame) -> pd.DataFrame:
     """Tabela por frase de SMS (modelo de mensagem, sem o link único de cada cliente),
     ordenada da maior para a menor volumetria disparada. Só considera linhas com frase
@@ -525,6 +569,32 @@ def agregar_por_frase(df: pd.DataFrame) -> pd.DataFrame:
     )
     agrupado = agrupado.merge(campanhas_por_frase, on="frase_norm", how="left")
     return agrupado.sort_values("total_disparado", ascending=False).reset_index(drop=True)
+
+
+def agregar_frase_com_crm(df_sms: pd.DataFrame, df_crm: pd.DataFrame) -> pd.DataFrame:
+    """Tabela por frase de SMS incluindo o resultado final no CRM (home/auth/oferta/
+    acordo): para cada frase, cruza os telefones que a receberam com o log de CRM e
+    conta quantos avançaram em cada etapa da negociação — sobretudo quantos viraram
+    acordo."""
+    base = agregar_por_frase(df_sms)
+    for etapa in ETAPAS_CRM:
+        base[etapa] = 0
+    if base.empty or df_crm.empty:
+        return base
+
+    validas = df_sms[df_sms["frase_norm"] != ""]
+    telefones_por_frase = validas.groupby("frase_norm")["telefone_norm"].apply(set)
+
+    for i, linha in base.iterrows():
+        telefones = telefones_por_frase.get(linha["frase_norm"], set())
+        if not telefones:
+            continue
+        sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones)]
+        contagem = sub_crm["acao_norm"].value_counts()
+        for etapa in ETAPAS_CRM:
+            base.at[i, etapa] = int(contagem.get(etapa, 0))
+
+    return base
 
 
 def _agregar_crm_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:

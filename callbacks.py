@@ -9,9 +9,10 @@ from dash import Input, Output, State, ctx, dash_table, html
 import charts
 from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
-    agregar_por_campanha, agregar_por_frase, agregar_por_grupo_ab,
-    agregar_por_grupo_estrategico, calcular_funil, calcular_kpis, carregar_dados_crm,
-    carregar_dados_sms, filtrar_dados, montar_pivot_crm, salvar_diario_estrategia,
+    agregar_por_campanha, agregar_por_grupo_ab, agregar_por_grupo_estrategico,
+    agregar_frase_com_crm, calcular_funil, calcular_kpis, carregar_dados_crm,
+    carregar_dados_sms, filtrar_dados, montar_pivot_crm,
+    montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -27,14 +28,10 @@ COLUNAS_TABELA_GRUPO_AB = [
     "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
 ]
 
-COLUNAS_TABELA_GRUPO_ESTRATEGICO = [
-    "Grupo Estratégico", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
-    "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
-]
-
 COLUNAS_TABELA_FRASE = [
     "Frase (modelo)", "Campanha(s)", "Total Disparado", "Total Enviado", "Total Entregue",
     "Total Falhado", "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
+    "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
 ]
 
 
@@ -136,8 +133,68 @@ def _tabela_pivot_crm_component(colunas_utm: list[str], linhas: list[dict]):
     )
 
 
+def _tabela_grupo_estrategico_ab_component(linhas: list[dict]):
+    if not linhas:
+        return html.P("Nenhum dado para os filtros selecionados.", className="text-muted")
+
+    colunas = [
+        {"name": "Grupo Estratégico / Grupo AB", "id": "rotulo"},
+        {"name": "Total Disparado", "id": "Total Disparado"},
+        {"name": "Total Enviado", "id": "Total Enviado"},
+        {"name": "Total Entregue", "id": "Total Entregue"},
+        {"name": "Total Falhado", "id": "Total Falhado"},
+        {"name": "Taxa de Envio", "id": "Taxa de Envio"},
+        {"name": "Taxa de Entrega", "id": "Taxa de Entrega"},
+        {"name": "Taxa de Falha", "id": "Taxa de Falha"},
+    ]
+
+    registros = []
+    indices_destaque = []
+    for i, linha in enumerate(linhas):
+        rotulo = linha["rotulo"]
+        if linha["nivel"] == "detalhe":
+            rotulo = "     " + charts.GRUPO_AB_LABEL.get(rotulo, rotulo)
+        else:
+            rotulo = charts.GRUPO_ESTRATEGICO_LABEL.get(rotulo, rotulo)
+            indices_destaque.append(i)
+
+        registros.append({
+            "rotulo": rotulo,
+            "Total Disparado": formatar_numero(linha["total_disparado"]),
+            "Total Enviado": formatar_numero(linha["total_enviado"]),
+            "Total Entregue": formatar_numero(linha["total_entregue"]),
+            "Total Falhado": formatar_numero(linha["total_falhado"]),
+            "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+        })
+
+    style_data_conditional = [{"if": {"row_index": "odd"}, "backgroundColor": "#121722"}]
+    style_data_conditional += [
+        {"if": {"row_index": i}, "backgroundColor": "#1E2735", "fontWeight": "700"}
+        for i in indices_destaque
+    ]
+
+    return dash_table.DataTable(
+        data=registros,
+        columns=colunas,
+        style_as_list_view=True,
+        style_table={"overflowX": "auto"},
+        style_header={
+            "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
+            "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
+        },
+        style_cell={
+            "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
+            "padding": "8px 12px", "fontSize": "0.83rem",
+        },
+        style_cell_conditional=[{"if": {"column_id": "rotulo"}, "textAlign": "left"}],
+        style_data_conditional=style_data_conditional,
+    )
+
+
 def registrar_callbacks(app):
-    ABAS = ["sms", "grupo", "grupo-estrategico", "frases", "crm", "diario"]
+    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "diario"]
 
     @app.callback(
         [Output(f"painel-tab-{aba}", "style") for aba in ABAS],
@@ -252,9 +309,7 @@ def registrar_callbacks(app):
             agregar_por_grupo_estrategico(filtrado) if not filtrado.empty
             else agregar_por_grupo_estrategico(df_completo.iloc[0:0])
         )
-        agregado_frase = (
-            agregar_por_frase(filtrado) if not filtrado.empty else agregar_por_frase(df_completo.iloc[0:0])
-        )
+        linhas_grupo_estrategico_ab = montar_tabela_grupo_estrategico_com_ab(filtrado)
 
         legenda = (
             f"{formatar_numero(len(filtrado))} registros no filtro "
@@ -272,6 +327,7 @@ def registrar_callbacks(app):
         crm_agregado_grupo_ab = (
             agregar_crm_por_grupo_ab(crm_filtrado) if not crm_filtrado.empty else crm_completo.iloc[0:0]
         )
+        agregado_frase = agregar_frase_com_crm(filtrado, crm_filtrado)
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
@@ -300,10 +356,7 @@ def registrar_callbacks(app):
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
             charts.grafico_volume_grupo_estrategico(filtrado),
             charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico),
-            _tabela_component(
-                charts.formatar_tabela_grupo_estrategico(agregado_grupo_estrategico),
-                COLUNAS_TABELA_GRUPO_ESTRATEGICO,
-            ),
+            _tabela_grupo_estrategico_ab_component(linhas_grupo_estrategico_ab),
             charts.grafico_taxa_entrega_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
             formatar_numero(totais_crm["home"]),

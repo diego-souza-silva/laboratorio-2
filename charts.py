@@ -347,10 +347,11 @@ def grafico_taxa_entrega_frase(agregado: pd.DataFrame) -> go.Figure:
 
 
 def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
+    tem_crm = "acordo" in agregado.columns
     registros = []
     for _, linha in agregado.iterrows():
         campanhas = linha.get("campanhas") or []
-        registros.append({
+        registro = {
             "Frase (modelo)": _truncar_frase(linha["frase_norm"], 140),
             "Campanha(s)": ", ".join(nome_curto(u) for u in campanhas),
             "Total Disparado": formatar_numero(linha["total_disparado"]),
@@ -360,7 +361,13 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Envio": formatar_percentual(linha["taxa_envio"]),
             "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
-        })
+        }
+        if tem_crm:
+            registro["Home"] = formatar_numero(linha["home"])
+            registro["Autenticação"] = formatar_numero(linha["auth"])
+            registro["Oferta"] = formatar_numero(linha["oferta"])
+            registro["Acordo (resultado final)"] = formatar_numero(linha["acordo"])
+        registros.append(registro)
     return registros
 
 

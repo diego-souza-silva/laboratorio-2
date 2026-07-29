@@ -215,33 +215,8 @@ def _aba_grupo_estrategico() -> html.Div:
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva por Grupo Estratégico", className="mb-3"),
+                html.H6("Grupo Estratégico × Grupo AB (detalhado)", className="mb-3"),
                 html.Div(id="tabela-grupo-estrategico-container"),
-            ]),
-            className="cartao-grafico shadow-sm",
-        ),
-    ])
-
-
-def _aba_frases() -> html.Div:
-    return html.Div([
-        dbc.Alert(
-            [
-                html.I(className="bi bi-info-circle-fill me-2"),
-                "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
-                "as mensagens são agrupadas pelo texto-modelo (sem o link) para comparar o "
-                "desempenho de cada modelo de mensagem, mesmo que reaparecça em campanhas "
-                "diferentes.",
-            ],
-            color="info", className="mb-3",
-        ),
-        dbc.Row([
-            dbc.Col(_grafico_card("Taxa de Entrega por Frase", "grafico-taxa-entrega-frase", altura="420px"), md=12),
-        ], className="g-3 mb-3"),
-        dbc.Card(
-            dbc.CardBody([
-                html.H6("Tabela Executiva por Frase (SMS)", className="mb-3"),
-                html.Div(id="tabela-frase-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -298,6 +273,27 @@ def _aba_conversao_crm() -> html.Div:
             dbc.CardBody([
                 html.H6("Ação × Campanha × Grupo AB (detalhado)", className="mb-3"),
                 html.Div(id="tabela-crm-pivot-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-3",
+        ),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-chat-left-text-fill me-2"),
+                "Resultado por frase de SMS: cada envio tem um link único por cliente, então "
+                "as mensagens são agrupadas pelo texto-modelo (sem o link). O resultado final "
+                "(Home/Autenticação/Oferta/Acordo) é cruzado por telefone com o canal "
+                "selecionado acima — deixe em \"Pós-SMS\" para ver o resultado de quem "
+                "recebeu cada frase.",
+            ],
+            color="secondary", className="mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Taxa de Entrega por Frase (SMS)", "grafico-taxa-entrega-frase", altura="420px"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Frase (SMS) — com resultado final", className="mb-3"),
+                html.Div(id="tabela-frase-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -358,8 +354,6 @@ def criar_layout() -> html.Div:
                             className="aba-botao"),
                 html.Button("Funil por Grupo Estratégico", id="btn-tab-grupo-estrategico", n_clicks=0,
                             className="aba-botao"),
-                html.Button("Resultado por Frase (SMS)", id="btn-tab-frases", n_clicks=0,
-                            className="aba-botao"),
                 html.Button("Conversão Pós-Contato (CRM)", id="btn-tab-crm", n_clicks=0,
                             className="aba-botao"),
                 html.Button("Diário / Estratégia", id="btn-tab-diario", n_clicks=0,
@@ -369,7 +363,6 @@ def criar_layout() -> html.Div:
             html.Div(_aba_funil_sms(), id="painel-tab-sms"),
             html.Div(_aba_grupo_ab(), id="painel-tab-grupo", style={"display": "none"}),
             html.Div(_aba_grupo_estrategico(), id="painel-tab-grupo-estrategico", style={"display": "none"}),
-            html.Div(_aba_frases(), id="painel-tab-frases", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
             html.Div(_aba_diario(), id="painel-tab-diario", style={"display": "none"}),
             dcc.Store(id="canal-crm-ativo", data="sms"),
