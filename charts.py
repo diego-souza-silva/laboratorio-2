@@ -374,7 +374,7 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
 
 
 _NOMES_SITUACAO_WHATSAPP = {
-    "Entregue": "Entregue", "Lido": "Lido", "Enviado": "Pendente",
+    "Entregue": "Entregue (não lido)", "Lido": "Lido", "Enviado": "Pendente",
     "Nao Entregue": "Não Entregue", "Nao Enviado": "Não Enviado",
 }
 _CORES_SITUACAO_WHATSAPP = {
@@ -426,7 +426,7 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
         registro = {
             "Mensagem (modelo)": _truncar_frase(linha["mensagem_norm"], 140),
             "Total": formatar_numero(linha["total"]),
-            "Entregue": formatar_numero(linha["Entregue"]),
+            "Entregue (não lido)": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
             "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),
@@ -480,7 +480,7 @@ def formatar_tabela_whatsapp_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
         registros.append({
             "Grupo AB": linha["grupo_ab"],
             "Total": formatar_numero(linha["total"]),
-            "Entregue": formatar_numero(linha["Entregue"]),
+            "Entregue (não lido)": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
             "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),
@@ -498,7 +498,7 @@ def formatar_tabela_whatsapp_grupo_estrategico(agregado: pd.DataFrame) -> list[d
         registros.append({
             "Grupo Estratégico": GRUPO_ESTRATEGICO_LABEL.get(linha["grupo_estrategico"], linha["grupo_estrategico"]),
             "Total": formatar_numero(linha["total"]),
-            "Entregue": formatar_numero(linha["Entregue"]),
+            "Entregue (não lido)": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
             "Pendente": formatar_numero(linha["Enviado"]),
             "Não Entregue": formatar_numero(linha["Nao Entregue"]),

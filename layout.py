@@ -43,7 +43,7 @@ def _linha_kpis() -> html.Div:
         ("kpi-taxa-falha", "Taxa de Falha", "bi-graph-down", "#FF5C5C"),
     ]
     cartoes_whatsapp = [
-        ("kpi-whatsapp-entregue", "Entregue", "bi-check-circle-fill", "#2ECC71"),
+        ("kpi-whatsapp-entregue", "Entregue (não lido)", "bi-check-circle-fill", "#2ECC71"),
         ("kpi-whatsapp-lido", "Lido", "bi-eye-fill", "#2ECC71"),
         ("kpi-whatsapp-enviado", "Pendente", "bi-send-check-fill", "#F5A623"),
         ("kpi-whatsapp-nao-entregue", "Não Entregue", "bi-x-circle-fill", "#FF5C5C"),
