@@ -12,10 +12,12 @@ from data_processing import (
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_whatsapp,
-    calcular_kpis, calcular_kpis_whatsapp, carregar_dados_crm, carregar_dados_sms,
+    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_sms,
+    calcular_funil_combinado_whatsapp, calcular_funil_whatsapp, calcular_kpis,
+    calcular_kpis_whatsapp, carregar_dados_crm, carregar_dados_sms,
     carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
-    montar_pivot_crm, montar_tabela_grupo_estrategico_com_ab, salvar_diario_estrategia,
+    montar_pivot_crm, montar_tabela_frase_com_grupo, montar_tabela_grupo_estrategico_com_ab,
+    montar_tabela_mensagem_com_grupo, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -221,6 +223,60 @@ def _tabela_grupo_estrategico_ab_component(linhas: list[dict]):
     )
 
 
+def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_coluna: str):
+    if not linhas:
+        return html.P("Nenhum dado para os filtros selecionados.", className="text-muted")
+
+    colunas = [
+        {"name": titulo_coluna, "id": "rotulo"},
+        {"name": "Home", "id": "Home"},
+        {"name": "Autenticação", "id": "Autenticação"},
+        {"name": "Oferta", "id": "Oferta"},
+        {"name": "Acordo (resultado final)", "id": "Acordo (resultado final)"},
+    ]
+
+    registros = []
+    indices_destaque = []
+    for i, linha in enumerate(linhas):
+        rotulo = linha["rotulo"]
+        if linha["nivel"] == "detalhe":
+            rotulo = "     " + mapa_label.get(rotulo, rotulo)
+        else:
+            rotulo = rotulo if len(rotulo) <= 90 else rotulo[:89].rstrip() + "…"
+            indices_destaque.append(i)
+
+        registros.append({
+            "rotulo": rotulo,
+            "Home": formatar_numero(linha["home"]),
+            "Autenticação": formatar_numero(linha["auth"]),
+            "Oferta": formatar_numero(linha["oferta"]),
+            "Acordo (resultado final)": formatar_numero(linha["acordo"]),
+        })
+
+    style_data_conditional = [{"if": {"row_index": "odd"}, "backgroundColor": "#121722"}]
+    style_data_conditional += [
+        {"if": {"row_index": i}, "backgroundColor": "#1E2735", "fontWeight": "700"}
+        for i in indices_destaque
+    ]
+
+    return dash_table.DataTable(
+        data=registros,
+        columns=colunas,
+        style_as_list_view=True,
+        style_table={"overflowX": "auto"},
+        style_header={
+            "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
+            "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
+        },
+        style_cell={
+            "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
+            "padding": "8px 12px", "fontSize": "0.83rem",
+        },
+        style_cell_conditional=[{"if": {"column_id": "rotulo"}, "textAlign": "left"}],
+        style_data_conditional=style_data_conditional,
+    )
+
+
 def registrar_callbacks(app):
     ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "diario"]
 
@@ -309,9 +365,13 @@ def registrar_callbacks(app):
         Output("grafico-taxa-entrega-frase", "figure"),
         Output("grafico-crm-frase", "figure"),
         Output("tabela-frase-container", "children"),
+        Output("tabela-frase-grupo-ab-container", "children"),
+        Output("tabela-frase-grupo-estrategico-container", "children"),
         Output("grafico-status-mensagem-whatsapp", "figure"),
         Output("grafico-crm-mensagem-whatsapp", "figure"),
         Output("tabela-mensagem-whatsapp-container", "children"),
+        Output("tabela-mensagem-whatsapp-grupo-ab-container", "children"),
+        Output("tabela-mensagem-whatsapp-grupo-estrategico-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -409,6 +469,42 @@ def registrar_callbacks(app):
         colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO, "grupo_ab")
         colunas_pivot_ge, linhas_pivot_ge = montar_pivot_crm(crm_filtrado, CAMPANHAS_ESCOPO, "grupo_estrategico")
 
+        # Funil combinado (Disparo + CRM), na aba Conversão Pós-Contato: continua o
+        # funil de entrega direto no funil de negociação, na mesma campanha (UTM) da
+        # aba CRM (utms_crm) — não a campanha do filtro global do Funil Geral.
+        titulo_funil_crm = f"Funil de Conversão {CANAL_LABEL_FUNIL.get(canal_crm, 'Pós-Contato')}"
+        if canal_crm == "sms":
+            filtrado_crm_sms = filtrar_dados(
+                df_completo, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+                grupos_estrategicos=grupos_estrategicos,
+            )
+            grafico_funil_crm_combinado = charts.grafico_funil(
+                calcular_funil_combinado_sms(calcular_kpis(filtrado_crm_sms), totais_crm),
+                cores=charts.CORES_FUNIL_COMBINADO_SMS, titulo=titulo_funil_crm, altura=560,
+                textposition="outside",
+            )
+        elif canal_crm == "whatsapp":
+            whatsapp_filtrado_crm = filtrar_dados_whatsapp(
+                whatsapp_completo, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+                grupos_estrategicos=grupos_estrategicos,
+            )
+            grafico_funil_crm_combinado = charts.grafico_funil(
+                calcular_funil_combinado_whatsapp(calcular_kpis_whatsapp(whatsapp_filtrado_crm), totais_crm),
+                cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=titulo_funil_crm, altura=560,
+                textposition="outside",
+            )
+        else:
+            grafico_funil_crm_combinado = charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato"))
+
+        linhas_frase_grupo_ab = montar_tabela_frase_com_grupo(filtrado, crm_filtrado, "grupo_ab")
+        linhas_frase_grupo_estrategico = montar_tabela_frase_com_grupo(filtrado, crm_filtrado, "grupo_estrategico")
+        linhas_mensagem_grupo_ab = montar_tabela_mensagem_com_grupo(whatsapp_completo, crm_filtrado, "grupo_ab")
+        linhas_mensagem_grupo_estrategico = montar_tabela_mensagem_com_grupo(
+            whatsapp_completo, crm_filtrado, "grupo_estrategico"
+        )
+
         return (
             formatar_numero(kpis["disparado"]),
             formatar_numero(kpis["enviado"]),
@@ -457,17 +553,31 @@ def registrar_callbacks(app):
             charts.grafico_taxa_entrega_frase(agregado_frase),
             charts.grafico_crm_por_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
+            _tabela_texto_grupo_component(
+                linhas_frase_grupo_ab, charts.GRUPO_AB_LABEL, "Frase (modelo) / Grupo AB",
+            ),
+            _tabela_texto_grupo_component(
+                linhas_frase_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
+                "Frase (modelo) / Grupo Estratégico",
+            ),
             charts.grafico_status_mensagem_whatsapp(agregado_mensagem_whatsapp),
             charts.grafico_crm_por_mensagem_whatsapp(agregado_mensagem_whatsapp),
             _tabela_component(
                 charts.formatar_tabela_mensagem_whatsapp(agregado_mensagem_whatsapp),
                 COLUNAS_TABELA_MENSAGEM_WHATSAPP,
             ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_grupo_ab, charts.GRUPO_AB_LABEL, "Mensagem (modelo) / Grupo AB",
+            ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
+                "Mensagem (modelo) / Grupo Estratégico",
+            ),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),
             formatar_numero(totais_crm["acordo"]),
-            charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato")),
+            grafico_funil_crm_combinado,
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
             charts.grafico_crm_por_grupo_estrategico(crm_agregado_grupo_estrategico),

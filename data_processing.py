@@ -705,16 +705,10 @@ def calcular_kpis(df: pd.DataFrame) -> dict:
     }
 
 
-def calcular_funil(df: pd.DataFrame) -> list[dict]:
-    """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou) com
-    quantidade, % sobre a base, conversão e perda em relação à etapa anterior."""
-    kpis = calcular_kpis(df)
-    etapas = [
-        ("Disparado", kpis["disparado"]),
-        ("Enviado", kpis["enviado"]),
-        ("Entregue", kpis["entregue"]),
-        ("Falhou", kpis["falhou"]),
-    ]
+def _montar_funil(etapas: list[tuple[str, int]]) -> list[dict]:
+    """Monta a lista de etapas de um funil (quantidade, % sobre a base, conversão e
+    perda em relação à etapa anterior) a partir de uma sequência (nome, valor) já em
+    ordem decrescente esperada — reutilizado por todos os funis do dashboard."""
     base = etapas[0][1] or 1
     resultado = []
     anterior = None
@@ -735,6 +729,17 @@ def calcular_funil(df: pd.DataFrame) -> list[dict]:
         })
         anterior = valor
     return resultado
+
+
+def calcular_funil(df: pd.DataFrame) -> list[dict]:
+    """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou)."""
+    kpis = calcular_kpis(df)
+    return _montar_funil([
+        ("Disparado", kpis["disparado"]),
+        ("Enviado", kpis["enviado"]),
+        ("Entregue", kpis["entregue"]),
+        ("Falhou", kpis["falhou"]),
+    ])
 
 
 def calcular_funil_whatsapp(kpis_whatsapp: dict) -> list[dict]:
@@ -749,32 +754,49 @@ def calcular_funil_whatsapp(kpis_whatsapp: dict) -> list[dict]:
     nao_entregue = kpis_whatsapp["Nao Entregue"]
     nao_enviado = kpis_whatsapp["Nao Enviado"]
 
-    etapas = [
+    return _montar_funil([
         ("Disparado", entregue + lido + enviado_status + nao_entregue + nao_enviado),
         ("Enviado", entregue + lido + enviado_status + nao_entregue),
         ("Entregue", entregue + lido),
         ("Lido", lido),
-    ]
-    base = etapas[0][1] or 1
-    resultado = []
-    anterior = None
-    for nome, valor in etapas:
-        percentual_base = taxa(valor, base)
-        if anterior is None:
-            conversao = 100.0
-            perda = 0.0
-        else:
-            conversao = taxa(valor, anterior)
-            perda = 100.0 - conversao
-        resultado.append({
-            "etapa": nome,
-            "quantidade": valor,
-            "percentual_base": percentual_base,
-            "conversao": conversao,
-            "perda": perda,
-        })
-        anterior = valor
-    return resultado
+    ])
+
+
+def calcular_funil_combinado_sms(kpis: dict, totais_crm: dict) -> list[dict]:
+    """Funil combinado Disparo + CRM do SMS: continua o funil de entrega (Disparado ->
+    Enviado -> Entregue) direto para o funil de negociação (Home -> Autenticação ->
+    Oferta -> Acordo), numa visão única ponta a ponta."""
+    return _montar_funil([
+        ("Disparado", kpis["disparado"]),
+        ("Enviado", kpis["enviado"]),
+        ("Entregue", kpis["entregue"]),
+        ("Home", totais_crm["home"]),
+        ("Autenticação", totais_crm["auth"]),
+        ("Oferta Apresentada", totais_crm["oferta"]),
+        ("Acordo Gerado", totais_crm["acordo"]),
+    ])
+
+
+def calcular_funil_combinado_whatsapp(kpis_whatsapp: dict, totais_crm: dict) -> list[dict]:
+    """Funil combinado Disparo + CRM do WhatsApp: continua o funil de entrega
+    (Disparado -> Enviado -> Entregue -> Lido) direto para o funil de negociação
+    (Home -> Autenticação -> Oferta -> Acordo), numa visão única ponta a ponta."""
+    entregue = kpis_whatsapp["Entregue"]
+    lido = kpis_whatsapp["Lido"]
+    enviado_status = kpis_whatsapp["Enviado"]
+    nao_entregue = kpis_whatsapp["Nao Entregue"]
+    nao_enviado = kpis_whatsapp["Nao Enviado"]
+
+    return _montar_funil([
+        ("Disparado", entregue + lido + enviado_status + nao_entregue + nao_enviado),
+        ("Enviado", entregue + lido + enviado_status + nao_entregue),
+        ("Entregue", entregue + lido),
+        ("Lido", lido),
+        ("Home", totais_crm["home"]),
+        ("Autenticação", totais_crm["auth"]),
+        ("Oferta Apresentada", totais_crm["oferta"]),
+        ("Acordo Gerado", totais_crm["acordo"]),
+    ])
 
 
 def _agregar_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
@@ -910,6 +932,62 @@ def agregar_frase_com_crm(df_sms: pd.DataFrame, df_crm: pd.DataFrame) -> pd.Data
             base.at[i, etapa] = int(contagem.get(etapa, 0))
 
     return base
+
+
+def _montar_tabela_texto_com_grupo(
+    base: pd.DataFrame, coluna_texto: str, df_origem: pd.DataFrame, df_crm: pd.DataFrame, coluna_grupo: str,
+) -> list[dict]:
+    """Monta a tabela Texto (frase/mensagem, subtotal) > Grupo AB/Grupo Estratégico
+    (detalhe) do resultado de CRM (Home/Autenticação/Oferta/Acordo) — mostra o
+    grupo_ab/grupo_estrategico por dentro de cada frase/mensagem, pra saber qual
+    segmento converte melhor em cada texto (resultado qualitativo, não só a taxa de
+    entrega). Reutilizado tanto pra frase de SMS quanto pra mensagem de WhatsApp."""
+    if base.empty:
+        return []
+
+    ordem = GRUPO_AB_ORDEM if coluna_grupo == "grupo_ab" else GRUPO_ESTRATEGICO_ORDEM
+    validas = df_origem[df_origem[coluna_texto] != ""]
+    telefones_por_texto = validas.groupby(coluna_texto)["telefone_norm"].apply(set)
+
+    linhas = []
+    for _, linha in base.iterrows():
+        texto = linha[coluna_texto]
+        linhas.append({
+            "rotulo": texto, "nivel": "subtotal",
+            "home": int(linha["home"]), "auth": int(linha["auth"]),
+            "oferta": int(linha["oferta"]), "acordo": int(linha["acordo"]),
+        })
+
+        telefones = telefones_por_texto.get(texto, set())
+        if not telefones or df_crm.empty:
+            continue
+        sub_origem = validas[validas["telefone_norm"].isin(telefones)]
+        grupos_presentes = [g for g in ordem if g in sub_origem[coluna_grupo].unique()]
+        for grupo in grupos_presentes:
+            telefones_grupo = set(sub_origem[sub_origem[coluna_grupo] == grupo]["telefone_norm"])
+            sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones_grupo)]
+            contagem = sub_crm["acao_norm"].value_counts()
+            linhas.append({
+                "rotulo": grupo, "nivel": "detalhe",
+                "home": int(contagem.get("home", 0)), "auth": int(contagem.get("auth", 0)),
+                "oferta": int(contagem.get("oferta", 0)), "acordo": int(contagem.get("acordo", 0)),
+            })
+
+    return linhas
+
+
+def montar_tabela_frase_com_grupo(df_sms: pd.DataFrame, df_crm: pd.DataFrame, coluna_grupo: str) -> list[dict]:
+    """Resultado de CRM por frase de SMS, com o grupo_ab/grupo_estrategico aninhado
+    dentro de cada frase (coluna_grupo escolhe qual das duas dimensões)."""
+    base = agregar_frase_com_crm(df_sms, df_crm)
+    return _montar_tabela_texto_com_grupo(base, "frase_norm", df_sms, df_crm, coluna_grupo)
+
+
+def montar_tabela_mensagem_com_grupo(df_whatsapp: pd.DataFrame, df_crm: pd.DataFrame, coluna_grupo: str) -> list[dict]:
+    """Resultado de CRM por mensagem de WhatsApp, com o grupo_ab/grupo_estrategico
+    aninhado dentro de cada mensagem (coluna_grupo escolhe qual das duas dimensões)."""
+    base = agregar_mensagem_whatsapp_com_crm(df_whatsapp, df_crm)
+    return _montar_tabela_texto_com_grupo(base, "mensagem_norm", df_whatsapp, df_crm, coluna_grupo)
 
 
 def _agregar_crm_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:

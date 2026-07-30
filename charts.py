@@ -19,6 +19,13 @@ CORES = {
     "pendente": "#F5A623",
 }
 
+# Funil combinado (Disparo + CRM): continua as cores do funil de entrega direto nas
+# cores do funil de negociação (Home=cinza, Autenticação=azul, Oferta=laranja, Acordo=verde).
+CORES_FUNIL_COMBINADO_SMS = ["#8B93B8", "#3DA9FC", "#2ECC71", "#8B93B8", "#3DA9FC", "#F5A623", "#2ECC71"]
+CORES_FUNIL_COMBINADO_WHATSAPP = [
+    "#8B93B8", "#3DA9FC", "#2ECC71", "#0FA968", "#8B93B8", "#3DA9FC", "#F5A623", "#2ECC71",
+]
+
 FUNDO_PAPEL = "rgba(0,0,0,0)"
 FUNDO_PLOT = "rgba(0,0,0,0)"
 COR_FONTE = "#E5E9F0"
@@ -88,7 +95,10 @@ def _layout_base(fig: go.Figure, titulo: str | None = None, altura: int = 340) -
     return fig
 
 
-def grafico_funil(etapas: list[dict], cores: list[str] | None = None) -> go.Figure:
+def grafico_funil(
+    etapas: list[dict], cores: list[str] | None = None,
+    titulo: str | None = None, altura: int = 360, textposition: str = "inside",
+) -> go.Figure:
     nomes = [e["etapa"] for e in etapas]
     valores = [e["quantidade"] for e in etapas]
     textos = [
@@ -103,7 +113,7 @@ def grafico_funil(etapas: list[dict], cores: list[str] | None = None) -> go.Figu
             y=nomes,
             x=valores,
             text=textos,
-            textposition="inside",
+            textposition=textposition,
             textinfo="text",
             marker=dict(color=cores, line=dict(color="#0F1420", width=1)),
             connector=dict(line=dict(color=COR_GRADE, width=1)),
@@ -112,7 +122,7 @@ def grafico_funil(etapas: list[dict], cores: list[str] | None = None) -> go.Figu
             "%{customdata[0]:.1f}%<br>Perda vs etapa anterior: %{customdata[1]:.1f}%<extra></extra>",
         )
     )
-    return _layout_base(fig, altura=360)
+    return _layout_base(fig, titulo, altura=altura)
 
 
 def grafico_evolucao_horaria(df: pd.DataFrame) -> go.Figure:

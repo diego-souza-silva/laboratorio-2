@@ -159,3 +159,22 @@ por um marcador fixo (`{link}`) antes de agrupar, comparando o desempenho de cad
 texto-modelo de mensagem — mesmo que ele seja reutilizado em campanhas diferentes. Só
 considera campanhas cujo arquivo de disparo tem a frase (`ARQUIVOS PARA DISPAROS/{utm}.csv`
 com coluna `frase`), ou seja, hoje é específico do canal SMS/Kolmeya.
+
+Tanto essa tabela quanto a de "Resultado por Mensagem (WhatsApp)" têm duas tabelas
+extras logo abaixo — "Resultado por Frase/Mensagem × Grupo AB" e "× Grupo Estratégico"
+— com o grupo_ab/grupo_estrategico aninhado dentro de cada frase/mensagem (mesmo
+padrão de subtotal + detalhe usado no Funil por Grupo Estratégico), pra deixar o
+resultado qualitativo: mostra não só a taxa de entrega, mas qual segmento de cliente
+converteu melhor (Home/Autenticação/Oferta/Acordo) em cada texto.
+
+## Funil de Conversão combinado (aba CRM)
+
+O gráfico "Funil de Conversão" na aba "Conversão Pós-Contato (CRM)" (sub-abas Pós-SMS e
+Pós-WhatsApp) é ponta a ponta: continua o funil de entrega (Disparado → Enviado →
+Entregue, e no WhatsApp também Lido) direto no funil de negociação (Home →
+Autenticação → Oferta → Acordo), na campanha selecionada no filtro "Campanha (UTM) —
+CRM" da própria aba (não no filtro global do Funil Geral). Como a base de disparo é
+sempre muito maior que quem de fato negocia, as etapas de CRM aparecem como barras bem
+finas — os números ficam escritos do lado de fora de cada barra pra não ficarem
+ilegíveis. A sub-aba Pós-Email mantém o funil só de CRM (sem etapas de entrega), já que
+não há arquivo de retorno para esse canal ainda.

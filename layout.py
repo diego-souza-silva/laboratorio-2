@@ -341,10 +341,22 @@ def _aba_conversao_crm() -> html.Div:
             dbc.Col(_cartao_kpi("kpi-crm-oferta", "Oferta Apresentada", "bi-tag-fill", "#F5A623"), md=3),
             dbc.Col(_cartao_kpi("kpi-crm-acordo", "Acordo Gerado", "bi-file-earmark-check-fill", "#2ECC71"), md=3),
         ], className="g-3 mb-3"),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-info-circle-fill me-2"),
+                "O funil abaixo é ponta a ponta: continua o funil de entrega (Disparado → "
+                "Enviado → Entregue, e no WhatsApp também Lido) direto no funil de "
+                "negociação (Home → Autenticação → Oferta → Acordo), na mesma campanha "
+                "selecionada no filtro \"Campanha (UTM) — CRM\" acima.",
+            ],
+            color="info", className="mb-3",
+        ),
         dbc.Row([
-            dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm"), md=4),
-            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=4),
-            dbc.Col(_grafico_card("Ações de CRM por Grupo Estratégico", "grafico-crm-grupo-estrategico"), md=4),
+            dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm", altura="620px"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Ações de CRM por Grupo Estratégico", "grafico-crm-grupo-estrategico"), md=6),
         ], className="g-3 mb-3"),
         dbc.Row([
             dbc.Col(_grafico_card("Ações de CRM por Campanha", "grafico-crm-campanha"), md=12),
@@ -387,6 +399,29 @@ def _aba_conversao_crm() -> html.Div:
                     ]),
                     className="cartao-grafico shadow-sm mb-3",
                 ),
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-bar-chart-fill me-2"),
+                        "Resultado qualitativo por frase: o mesmo resultado de CRM acima, agora "
+                        "com o grupo_ab/grupo_estrategico aninhado dentro de cada frase — mostra "
+                        "qual segmento converte melhor em cada mensagem.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Frase × Grupo AB", className="mb-3"),
+                        html.Div(id="tabela-frase-grupo-ab-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Frase × Grupo Estratégico", className="mb-3"),
+                        html.Div(id="tabela-frase-grupo-estrategico-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
             ],
             id="secao-frase-sms",
         ),
@@ -422,6 +457,29 @@ def _aba_conversao_crm() -> html.Div:
                     dbc.CardBody([
                         html.H6("Tabela Executiva por Mensagem (WhatsApp) — com resultado final", className="mb-3"),
                         html.Div(id="tabela-mensagem-whatsapp-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-bar-chart-fill me-2"),
+                        "Resultado qualitativo por mensagem: o mesmo resultado de CRM acima, agora "
+                        "com o grupo_ab/grupo_estrategico aninhado dentro de cada mensagem — mostra "
+                        "qual segmento converte melhor em cada mensagem.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Mensagem × Grupo AB", className="mb-3"),
+                        html.Div(id="tabela-mensagem-whatsapp-grupo-ab-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Mensagem × Grupo Estratégico", className="mb-3"),
+                        html.Div(id="tabela-mensagem-whatsapp-grupo-estrategico-container"),
                     ]),
                     className="cartao-grafico shadow-sm",
                 ),
