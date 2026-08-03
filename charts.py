@@ -454,6 +454,47 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
     return registros
 
 
+_NOMES_AIRYS = {"accepted": "Accepted", "delivered": "Delivered", "read": "Read", "failed": "Failed"}
+_CORES_AIRYS = {
+    "accepted": CORES["disparado"], "delivered": CORES["entregue"],
+    "read": "#0FA968", "failed": CORES["falhou"],
+}
+
+
+def grafico_airys_por_template(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Resultado por Template (Airys) (sem dados no período)")
+
+    ordenado = agregado.sort_values("accepted")
+    rotulos = [_truncar_frase(t, 55) for t in ordenado["template_name"]]
+    fig = go.Figure()
+    for chave in ["accepted", "delivered", "read", "failed"]:
+        fig.add_trace(go.Bar(
+            y=rotulos, x=ordenado[chave], name=_NOMES_AIRYS[chave],
+            orientation="h", marker_color=_CORES_AIRYS[chave],
+        ))
+    fig.update_layout(barmode="group")
+    altura = max(280, 70 * len(ordenado))
+    return _layout_base(fig, "Resultado por Template (Airys)", altura=altura)
+
+
+def formatar_tabela_airys_template(agregado: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in agregado.iterrows():
+        registros.append({
+            "Template": linha["template_name"],
+            "Accepted": formatar_numero(linha["accepted"]),
+            "Delivered": formatar_numero(linha["delivered"]),
+            "Read": formatar_numero(linha["read"]),
+            "Failed": formatar_numero(linha["failed"]),
+            "Taxa de Entrega": formatar_percentual(linha["taxa_entrega"]),
+            "Taxa de Leitura": formatar_percentual(linha["taxa_leitura"]),
+            "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
+            "Observação": linha["notes"],
+        })
+    return registros
+
+
 def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
     if agregado.empty:
         return _layout_base(go.Figure(), "Resultado de WhatsApp por Grupo AB (sem dados no período)")

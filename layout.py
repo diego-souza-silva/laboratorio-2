@@ -481,6 +481,27 @@ def _aba_conversao_crm() -> html.Div:
                         html.H6("Resultado por Mensagem × Grupo Estratégico", className="mb-3"),
                         html.Div(id="tabela-mensagem-whatsapp-grupo-estrategico-container"),
                     ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-whatsapp me-2"),
+                        "Resultado por template do Airys (Insights da Meta): esse relatório já vem "
+                        "agregado por template — não tem telefone do cliente, então não dá pra "
+                        "segmentar por grupo_ab/grupo_estrategico nem cruzar com o CRM. A coluna "
+                        "\"Observação\" explica a origem/limite de cada linha (ex.: quando o "
+                        "template não foi identificado pela API).",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Row([
+                    dbc.Col(_grafico_card("Resultado por Template (Airys)", "grafico-airys-template", altura="420px"), md=12),
+                ], className="g-3 mb-3"),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Tabela Executiva por Template (Airys)", className="mb-3"),
+                        html.Div(id="tabela-airys-template-container"),
+                    ]),
                     className="cartao-grafico shadow-sm",
                 ),
             ],

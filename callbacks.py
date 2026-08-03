@@ -8,16 +8,17 @@ from dash import Input, Output, State, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
-    agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
-    agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
-    agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_sms,
-    calcular_funil_combinado_whatsapp, calcular_funil_whatsapp, calcular_kpis,
-    calcular_kpis_whatsapp, carregar_dados_crm, carregar_dados_sms,
-    carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
-    montar_pivot_crm, montar_tabela_frase_com_grupo, montar_tabela_grupo_estrategico_com_ab,
-    montar_tabela_mensagem_com_grupo, salvar_diario_estrategia,
+    CAMPANHAS_ESCOPO, agregar_airys_por_template, agregar_crm_por_campanha,
+    agregar_crm_por_grupo_ab, agregar_crm_por_grupo_estrategico, agregar_por_campanha,
+    agregar_por_grupo_ab, agregar_por_grupo_estrategico, agregar_frase_com_crm,
+    agregar_mensagem_whatsapp_com_crm, agregar_whatsapp_por_campanha,
+    agregar_whatsapp_por_grupo_ab, agregar_whatsapp_por_grupo_estrategico, calcular_funil,
+    calcular_funil_combinado_sms, calcular_funil_combinado_whatsapp, calcular_funil_whatsapp,
+    calcular_kpis, calcular_kpis_whatsapp, carregar_dados_airys_template, carregar_dados_crm,
+    carregar_dados_sms, carregar_dados_whatsapp_mensagem, filtrar_dados,
+    filtrar_dados_whatsapp, montar_pivot_crm, montar_tabela_frase_com_grupo,
+    montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
+    salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -58,6 +59,11 @@ COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
     "Mensagem (modelo)", "Total", "Entregue (não lido)", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
     "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
+]
+
+COLUNAS_TABELA_AIRYS_TEMPLATE = [
+    "Template", "Accepted", "Delivered", "Read", "Failed",
+    "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha", "Observação",
 ]
 
 
@@ -372,6 +378,8 @@ def registrar_callbacks(app):
         Output("tabela-mensagem-whatsapp-container", "children"),
         Output("tabela-mensagem-whatsapp-grupo-ab-container", "children"),
         Output("tabela-mensagem-whatsapp-grupo-estrategico-container", "children"),
+        Output("grafico-airys-template", "figure"),
+        Output("tabela-airys-template-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -414,6 +422,10 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
             grupos_estrategicos=grupos_estrategicos,
         )
+
+        # Relatório do Airys é agregado por template (sem telefone do cliente), então
+        # não participa dos filtros de campanha/grupo — mostra sempre o total recebido.
+        agregado_airys = agregar_airys_por_template(carregar_dados_airys_template())
         kpis_whatsapp = calcular_kpis_whatsapp(whatsapp_filtrado)
         etapas_whatsapp = calcular_funil_whatsapp(kpis_whatsapp)
         agregado_whatsapp_grupo_ab = agregar_whatsapp_por_grupo_ab(whatsapp_filtrado)
@@ -573,6 +585,8 @@ def registrar_callbacks(app):
                 linhas_mensagem_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
                 "Mensagem (modelo) / Grupo Estratégico",
             ),
+            charts.grafico_airys_por_template(agregado_airys),
+            _tabela_component(charts.formatar_tabela_airys_template(agregado_airys), COLUNAS_TABELA_AIRYS_TEMPLATE),
             formatar_numero(totais_crm["home"]),
             formatar_numero(totais_crm["auth"]),
             formatar_numero(totais_crm["oferta"]),

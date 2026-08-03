@@ -85,7 +85,25 @@ nome do cliente (ex.: "Oi, FABIANA!"), então na seção "Resultado por Mensagem
 Pós-WhatsApp — as mensagens são agrupadas pelo texto-modelo (sem o nome), mesmo
 princípio do "Resultado por Frase (SMS)", e cruzadas por telefone com o log de CRM para
 mostrar o resultado final (Home/Autenticação/Oferta/Acordo) de quem recebeu cada
-mensagem.
+mensagem. Essa pasta hoje só recebe retorno por destinatário do **Otima** — o retorno do
+Airys usa um formato diferente (ver abaixo) e fica numa pasta própria.
+
+### `ARQUIVOS DE RETORNO WHATSAPP AIRYS/`
+Relatório do Airys (export de Insights da Graph API da Meta), com uma linha por
+**template/dia já agregado** (`template_name`, `accepted`, `delivered`, `read`, `failed`,
+`notes`) — diferente do retorno da Otima, **não tem telefone do destinatário**: a coluna
+`display_phone_number` é o número da Casas Bahia que enviou (a linha do WhatsApp
+Business), não o do cliente. Por isso essa pasta alimenta só a tabela e o gráfico
+"Resultado por Template (Airys)" na aba "Conversão Pós-Contato (CRM)", sub-aba
+Pós-WhatsApp — sem cruzamento por telefone, não dá pra segmentar por
+grupo_ab/grupo_estrategico, cruzar com o CRM (Home/Autenticação/Oferta/Acordo) por
+template, nem alimentar os cartões/funil de WhatsApp da aba Funil Geral (que dependem
+de saber quem recebeu cada mensagem). A coluna "Observação" na tabela mostra a nota de
+reconciliação de cada linha (ex.: quando o template não foi identificado pela API, ou
+quando a linha é uma diferença reconciliada entre duas contagens da Meta) — templates
+com totais estranhos (ex.: taxa acima de 100%) geralmente vêm de linhas assim, não de
+um problema no dashboard. Se o Airys disponibilizar um relatório por destinatário (como
+o da Otima), dá pra evoluir essa parte pro mesmo nível de detalhe.
 
 ### `ARQUIVOS LOG/`
 Log(s) de CRM (negociação: home/auth/oferta/acordo), usado só na aba auxiliar "Conversão
