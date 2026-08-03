@@ -30,7 +30,6 @@ RAIZ_PROJETO = Path(__file__).parent
 DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
 DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
 DIR_RETORNO_WHATSAPP = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP"
-DIR_RETORNO_WHATSAPP_AIRYS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP AIRYS"
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
@@ -526,59 +525,6 @@ def calcular_kpis_whatsapp(df: pd.DataFrame) -> dict:
         return {status: 0 for status in SITUACOES_WHATSAPP}
     contagem = df["situacao_norm"].value_counts()
     return {status: int(contagem.get(status, 0)) for status in SITUACOES_WHATSAPP}
-
-
-def carregar_dados_airys_template(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o relatório do Airys em `ARQUIVOS DE RETORNO WHATSAPP AIRYS/` — export de
-    Insights da Graph API da Meta, agregado por template/dia (Accepted/Delivered/Read/
-    Failed já somados), sem telefone do cliente (a coluna `display_phone_number` é o
-    número da Casas Bahia que enviou, não o do destinatário). Por isso não participa do
-    funil de Disparo/Envio/Entrega nem pode ser segmentado por grupo_ab/grupo_estrategico
-    ou cruzado com o CRM — alimenta só a tabela "Resultado por Template (Airys)" na aba
-    Conversão Pós-Contato (CRM), exclusiva da visão Pós-WhatsApp."""
-    if not forcar_reload and "airys_template" in _cache:
-        return _cache["airys_template"]
-
-    arquivos = sorted(DIR_RETORNO_WHATSAPP_AIRYS.glob("*.csv"))
-    partes = [ler_csv_auto(caminho) for caminho in arquivos]
-    df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
-    if df.empty:
-        _cache["airys_template"] = df
-        return df
-
-    for coluna in ["accepted", "delivered", "read", "failed"]:
-        if coluna in df.columns:
-            df[coluna] = pd.to_numeric(df[coluna], errors="coerce").fillna(0).astype(int)
-        else:
-            df[coluna] = 0
-
-    df["template_name"] = df["template_name"].fillna("(sem template)")
-    df.loc[df["template_name"].str.strip() == "", "template_name"] = "(sem template)"
-    df["notes"] = df["notes"].fillna("")
-
-    _cache["airys_template"] = df
-    return df
-
-
-def agregar_airys_por_template(df: pd.DataFrame) -> pd.DataFrame:
-    """Soma Accepted/Delivered/Read/Failed por template_name (pode haver mais de uma
-    linha por template se houver mais de um dia/export), com as taxas de entrega/
-    leitura/falha e a nota de reconciliação mais comum daquele template."""
-    colunas_vazias = ["template_name", "accepted", "delivered", "read", "failed",
-                       "taxa_entrega", "taxa_leitura", "taxa_falha", "notes"]
-    if df.empty:
-        return pd.DataFrame(columns=colunas_vazias)
-
-    agrupado = df.groupby("template_name").agg(
-        accepted=("accepted", "sum"), delivered=("delivered", "sum"),
-        read=("read", "sum"), failed=("failed", "sum"),
-        notes=("notes", lambda s: s.mode().iat[0] if not s.mode().empty else ""),
-    ).reset_index()
-
-    agrupado["taxa_entrega"] = agrupado.apply(lambda r: taxa(r["delivered"], r["accepted"]), axis=1)
-    agrupado["taxa_leitura"] = agrupado.apply(lambda r: taxa(r["read"], r["delivered"]), axis=1)
-    agrupado["taxa_falha"] = agrupado.apply(lambda r: taxa(r["failed"], r["accepted"]), axis=1)
-    return agrupado.sort_values("accepted", ascending=False).reset_index(drop=True)
 
 
 def _agregar_whatsapp_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
