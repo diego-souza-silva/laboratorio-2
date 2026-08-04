@@ -399,6 +399,19 @@ def _normalizar_telefone_com_ddi(valor) -> str:
     return digitos
 
 
+def _utm_sem_token_rcs(utm: str) -> str:
+    """UTM sem o token "RCS" (case-insensitive) e em minúsculas — usado pra casar a
+    UTM do log de CRM com a UTM do arquivo de disparo mesmo quando só um dos dois
+    carrega o token "RCS" no nome. Na prática, a plataforma às vezes gera o link de
+    tracking com a UTM "crua" do disparo original (sem "RCS"), mesmo quando renomeamos
+    nosso arquivo de disparo pra incluir "RCS" (convenção usada em `canal_da_campanha`
+    pra identificar o canal só pelo nome do arquivo) — sem essa normalização, o
+    cruzamento por igualdade exata perde 100% do resultado de CRM dessas campanhas."""
+    if not isinstance(utm, str):
+        return ""
+    return re.sub(r"rcs", "", utm, flags=re.IGNORECASE).strip().lower()
+
+
 def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o(s) log(s) de CRM (aba de conversão pós-contato) de ARQUIVOS LOG/ — todo
     arquivo da pasta é lido e concatenado, e filtrado às campanhas cadastradas em
@@ -425,8 +438,9 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
         df = df.drop_duplicates(chave)
 
     coluna_utm = "utm campaign" if "utm campaign" in df.columns else "utm"
-    df = df[df[coluna_utm].isin(CAMPANHAS_ESCOPO)].copy()
-    df = df.rename(columns={coluna_utm: "utm_campaign"})
+    mapa_utm_sem_rcs = {_utm_sem_token_rcs(u): u for u in CAMPANHAS_ESCOPO}
+    df["utm_campaign"] = df[coluna_utm].apply(_utm_sem_token_rcs).map(mapa_utm_sem_rcs)
+    df = df[df["utm_campaign"].notna()].copy()
     df["timestamp"] = df["data"].apply(parse_data_pt_br)
     df["acao_norm"] = df["acao"].str.strip().str.lower()
     df = df[df["acao_norm"].isin(ETAPAS_CRM)]
