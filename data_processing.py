@@ -1038,18 +1038,29 @@ def calcular_funil_combinado_sms(kpis: dict, totais_crm: dict) -> list[dict]:
     ])
 
 
-def calcular_funil_combinado_whatsapp(kpis_whatsapp: dict, totais_crm: dict) -> list[dict]:
+def calcular_funil_combinado_whatsapp(
+    kpis_whatsapp: dict, totais_crm: dict, total_disparado: int | None = None,
+) -> list[dict]:
     """Funil combinado Disparo + CRM do WhatsApp: continua o funil de entrega
     (Disparado -> Enviado -> Entregue -> Lido) direto para o funil de negociação
-    (Home -> Autenticação -> Oferta -> Acordo), numa visão única ponta a ponta."""
+    (Home -> Autenticação -> Oferta -> Acordo), numa visão única ponta a ponta.
+    `total_disparado`, quando informado, substitui a soma dos status do retorno como
+    valor de "Disparado" — o retorno por destinatário (Otima/Airys) às vezes só cobre
+    uma fração de quem foi de fato disparado (a API do Airys, por exemplo, só devolveu
+    status pra 968 de 3804 disparos), então a soma dos status do retorno subestima o
+    "Disparado" real; ver `total_disparado_campanhas`."""
     entregue = kpis_whatsapp["Entregue"]
     lido = kpis_whatsapp["Lido"]
     enviado_status = kpis_whatsapp["Enviado"]
     nao_entregue = kpis_whatsapp["Nao Entregue"]
     nao_enviado = kpis_whatsapp["Nao Enviado"]
+    disparado = (
+        total_disparado if total_disparado is not None
+        else entregue + lido + enviado_status + nao_entregue + nao_enviado
+    )
 
     return _montar_funil([
-        ("Disparado", entregue + lido + enviado_status + nao_entregue + nao_enviado),
+        ("Disparado", disparado),
         ("Enviado", entregue + lido + enviado_status + nao_entregue),
         ("Entregue", entregue + lido),
         ("Lido", lido),

@@ -465,6 +465,16 @@ def _aba_conversao_crm() -> html.Div:
         dbc.Row([
             dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm", altura="620px"), md=12),
         ], className="g-3 mb-3"),
+        html.Div(
+            dbc.Row([
+                dbc.Col(
+                    _grafico_card("Funil de Conversão (Airys)", "grafico-funil-crm-airys", altura="620px"),
+                    md=12,
+                ),
+            ], className="g-3 mb-3"),
+            id="bloco-funil-crm-airys",
+            style={"display": "none"},
+        ),
         dbc.Row([
             dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
             dbc.Col(_grafico_card("Ações de CRM por Grupo Estratégico", "grafico-crm-grupo-estrategico"), md=6),

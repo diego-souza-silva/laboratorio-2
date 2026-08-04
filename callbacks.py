@@ -326,6 +326,7 @@ def registrar_callbacks(app):
         Output("secao-frase-sms", "style"),
         Output("secao-mensagem-whatsapp", "style"),
         Output("secao-mensagem-rcs", "style"),
+        Output("bloco-funil-crm-airys", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
         Input("btn-canal-rcs", "n_clicks"),
@@ -335,12 +336,12 @@ def registrar_callbacks(app):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         oculto, visivel = {"display": "none"}, {"display": "block"}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto
+            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto, visivel
         if ctx.triggered_id == "btn-canal-rcs":
-            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel
+            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel, oculto
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto
-        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto
+            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto, oculto
+        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto, oculto
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -440,6 +441,7 @@ def registrar_callbacks(app):
         Output("kpi-crm-oferta", "children"),
         Output("kpi-crm-acordo", "children"),
         Output("grafico-funil-crm", "figure"),
+        Output("grafico-funil-crm-airys", "figure"),
         Output("grafico-crm-campanha", "figure"),
         Output("grafico-crm-grupo-ab", "figure"),
         Output("grafico-crm-grupo-estrategico", "figure"),
@@ -593,6 +595,7 @@ def registrar_callbacks(app):
         # funil de entrega direto no funil de negociação, na mesma campanha (UTM) da
         # aba CRM (utms_crm) — não a campanha do filtro global do Funil Geral.
         titulo_funil_crm = f"Funil de Conversão {CANAL_LABEL_FUNIL.get(canal_crm, 'Pós-Contato')}"
+        grafico_funil_crm_airys = charts.grafico_funil_crm(pd.DataFrame(), "Airys")
         if canal_crm == "sms":
             filtrado_crm_sms = filtrar_dados(
                 df_completo, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
@@ -605,20 +608,52 @@ def registrar_callbacks(app):
                 textposition="outside",
             )
         elif canal_crm == "whatsapp":
-            # Concatena Ótima + Airys: a campanha selecionada em "Campanha (UTM) — CRM"
-            # pode ser de qualquer um dos dois provedores, e cada um só tem retorno na
-            # sua própria base (whatsapp_completo é só Ótima) — sem juntar os dois, uma
-            # campanha Airys nunca acha seu telefone no retorno da Ótima e o funil sai
-            # zerado no trecho Disparado/Enviado/Entregue/Lido.
-            whatsapp_otima_e_airys = pd.concat([whatsapp_completo, airys_completo], ignore_index=True)
+            # Ótima e Airys têm cada um seu próprio retorno (whatsapp_completo é só
+            # Ótima, airys_completo é só Airys), seu próprio Total Disparado (o
+            # retorno não cobre 100% do disparo — ver total_disparado_campanhas) e seu
+            # próprio resultado de CRM, então viram dois funis separados em vez de um
+            # combinado (que ficava com o "Disparado" errado e misturava os provedores).
+            utms_crm_efetivas = utms_crm or CAMPANHAS_ESCOPO
+            utms_crm_otima = [u for u in utms_crm_efetivas if u in UTMS_WHATSAPP_OTIMA]
+            utms_crm_airys = [u for u in utms_crm_efetivas if u in UTMS_WHATSAPP_AIRYS]
+
             whatsapp_filtrado_crm = filtrar_dados_whatsapp(
-                whatsapp_otima_e_airys, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                whatsapp_completo, utms=utms_crm_otima, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
                 grupos_estrategicos=grupos_estrategicos,
             )
+            crm_filtrado_otima = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_otima)]
+            crm_agregado_otima_funil = agregar_crm_por_campanha(crm_filtrado_otima) if not crm_filtrado_otima.empty else crm_filtrado_otima
+            totais_crm_otima = (
+                crm_agregado_otima_funil[["home", "auth", "oferta", "acordo"]].sum()
+                if not crm_agregado_otima_funil.empty else {"home": 0, "auth": 0, "oferta": 0, "acordo": 0}
+            )
             grafico_funil_crm_combinado = charts.grafico_funil(
-                calcular_funil_combinado_whatsapp(calcular_kpis_whatsapp(whatsapp_filtrado_crm), totais_crm),
-                cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=titulo_funil_crm, altura=560,
+                calcular_funil_combinado_whatsapp(
+                    calcular_kpis_whatsapp(whatsapp_filtrado_crm), totais_crm_otima,
+                    total_disparado=total_disparado_campanhas(utms_crm_otima),
+                ),
+                cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=f"{titulo_funil_crm} (Ótima)", altura=560,
+                textposition="outside",
+            )
+
+            airys_filtrado_crm = filtrar_dados_whatsapp(
+                airys_completo, utms=utms_crm_airys, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+                grupos_estrategicos=grupos_estrategicos,
+            )
+            crm_filtrado_airys = crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_airys)]
+            crm_agregado_airys_funil = agregar_crm_por_campanha(crm_filtrado_airys) if not crm_filtrado_airys.empty else crm_filtrado_airys
+            totais_crm_airys = (
+                crm_agregado_airys_funil[["home", "auth", "oferta", "acordo"]].sum()
+                if not crm_agregado_airys_funil.empty else {"home": 0, "auth": 0, "oferta": 0, "acordo": 0}
+            )
+            grafico_funil_crm_airys = charts.grafico_funil(
+                calcular_funil_combinado_whatsapp(
+                    calcular_kpis_whatsapp(airys_filtrado_crm), totais_crm_airys,
+                    total_disparado=total_disparado_campanhas(utms_crm_airys),
+                ),
+                cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=f"{titulo_funil_crm} (Airys)", altura=560,
                 textposition="outside",
             )
         elif canal_crm == "rcs":
@@ -795,6 +830,7 @@ def registrar_callbacks(app):
             formatar_numero(totais_crm["oferta"]),
             formatar_numero(totais_crm["acordo"]),
             grafico_funil_crm_combinado,
+            grafico_funil_crm_airys,
             charts.grafico_crm_por_campanha(crm_agregado),
             charts.grafico_crm_por_grupo_ab(crm_agregado_grupo_ab),
             charts.grafico_crm_por_grupo_estrategico(crm_agregado_grupo_estrategico),
