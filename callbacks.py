@@ -32,6 +32,7 @@ UTMS_WHATSAPP_OTIMA = [
 UTMS_WHATSAPP_AIRYS = [
     u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "whatsapp" and fornecedor_da_campanha(u) == "airys"
 ]
+UTMS_SMS = [u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "sms"]
 
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
@@ -458,7 +459,12 @@ def registrar_callbacks(app):
         utms, data_ini, data_fim, faixa_hora, status, grupos_ab, grupos_estrategicos,
         utms_crm, canal_crm,
     ):
+        # `carregar_dados_sms()` descobre TODO arquivo de ARQUIVOS PARA DISPAROS/,
+        # de qualquer canal (SMS/WhatsApp/Airys/RCS/Email) — restringe aqui às
+        # campanhas de fato SMS/Kolmeya, já que esse é o bloco "SMS (Kolmeya)" do
+        # dashboard (senão o Total Disparado soma o disparo de todos os canais juntos).
         df_completo = carregar_dados_sms()
+        df_completo = df_completo[df_completo["utm_campaign"].isin(UTMS_SMS)]
 
         data_ini_dt = pd.to_datetime(data_ini).date() if data_ini else None
         data_fim_dt = pd.to_datetime(data_fim).date() if data_fim else None
