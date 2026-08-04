@@ -605,8 +605,14 @@ def registrar_callbacks(app):
                 textposition="outside",
             )
         elif canal_crm == "whatsapp":
+            # Concatena Ótima + Airys: a campanha selecionada em "Campanha (UTM) — CRM"
+            # pode ser de qualquer um dos dois provedores, e cada um só tem retorno na
+            # sua própria base (whatsapp_completo é só Ótima) — sem juntar os dois, uma
+            # campanha Airys nunca acha seu telefone no retorno da Ótima e o funil sai
+            # zerado no trecho Disparado/Enviado/Entregue/Lido.
+            whatsapp_otima_e_airys = pd.concat([whatsapp_completo, airys_completo], ignore_index=True)
             whatsapp_filtrado_crm = filtrar_dados_whatsapp(
-                whatsapp_completo, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                whatsapp_otima_e_airys, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
                 grupos_estrategicos=grupos_estrategicos,
             )
