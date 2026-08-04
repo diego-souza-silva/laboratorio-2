@@ -716,6 +716,16 @@ def telefones_das_campanhas(utms: list[str]) -> set[str]:
     return telefones
 
 
+def total_disparado_campanhas(utms: list[str]) -> int:
+    """Total de disparos (telefones únicos no arquivo de disparo) das campanhas
+    selecionadas — usado como "Total Disparado" de canais cujo retorno é só por
+    destinatário (WhatsApp Ótima/Airys), já que o retorno nem sempre cobre 100% do que
+    foi de fato disparado (o Airys, por exemplo, só retornou status pra uma fração da
+    lista de disparo: 968 de 3804). Somado campanha a campanha (em vez de uma união
+    global) pra não subcontar caso o mesmo telefone apareça em mais de uma campanha."""
+    return sum(len(telefones_das_campanhas([utm])) for utm in utms)
+
+
 def filtrar_dados_whatsapp(
     df: pd.DataFrame,
     utms: list[str] | None = None,

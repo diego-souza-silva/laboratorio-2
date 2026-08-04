@@ -18,7 +18,7 @@ from data_processing import (
     carregar_dados_crm, carregar_dados_rcs, carregar_dados_rcs_estilo_sms, carregar_dados_sms,
     carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp, fornecedor_da_campanha,
     montar_pivot_crm, montar_tabela_frase_com_grupo, montar_tabela_grupo_estrategico_com_ab,
-    montar_tabela_mensagem_com_grupo, salvar_diario_estrategia,
+    montar_tabela_mensagem_com_grupo, salvar_diario_estrategia, total_disparado_campanhas,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -486,10 +486,11 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
             grupos_estrategicos=grupos_estrategicos,
         )
+        utms_otima_selecionadas = [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_OTIMA]
         agregado_whatsapp_campanha = agregar_whatsapp_por_campanha(
-            whatsapp_filtrado_sem_utm,
-            [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_OTIMA],
+            whatsapp_filtrado_sem_utm, utms_otima_selecionadas,
         )
+        total_whatsapp_disparado = total_disparado_campanhas(utms_otima_selecionadas)
 
         airys_completo = carregar_dados_airys()
         airys_filtrado = filtrar_dados_whatsapp(
@@ -509,10 +510,11 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
             grupos_estrategicos=grupos_estrategicos,
         )
+        utms_airys_selecionadas = [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_AIRYS]
         agregado_airys_campanha = agregar_whatsapp_por_campanha(
-            airys_filtrado_sem_utm,
-            [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_AIRYS],
+            airys_filtrado_sem_utm, utms_airys_selecionadas,
         )
+        total_airys_disparado = total_disparado_campanhas(utms_airys_selecionadas)
 
         rcs_sms = carregar_dados_rcs_estilo_sms()
         rcs_sms_filtrado = filtrar_dados(
@@ -644,13 +646,13 @@ def registrar_callbacks(app):
             formatar_percentual(kpis["taxa_envio"]),
             formatar_percentual(kpis["taxa_entrega"]),
             formatar_percentual(kpis["taxa_falha"]),
-            formatar_numero(sum(kpis_whatsapp.values())),
+            formatar_numero(total_whatsapp_disparado),
             formatar_numero(kpis_whatsapp["Entregue"]),
             formatar_numero(kpis_whatsapp["Lido"]),
             formatar_numero(kpis_whatsapp["Enviado"]),
             formatar_numero(kpis_whatsapp["Nao Entregue"]),
             formatar_numero(kpis_whatsapp["Nao Enviado"]),
-            formatar_numero(sum(kpis_airys.values())),
+            formatar_numero(total_airys_disparado),
             formatar_numero(kpis_airys["Entregue"]),
             formatar_numero(kpis_airys["Lido"]),
             formatar_numero(kpis_airys["Enviado"]),
