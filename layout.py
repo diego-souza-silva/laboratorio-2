@@ -362,6 +362,24 @@ def _bloco_email_salesforce() -> html.Div:
             ],
             color="info", className="mb-3",
         ),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-exclamation-triangle-fill me-2"),
+                html.B("Ponto de atenção: "),
+                "\"Total Envios\" conta eventos de envio, não clientes únicos. Cada "
+                "Jornada dispara uma sequência automática de e-mails pro mesmo cliente "
+                "em dias diferentes (o sufixo \"-d1/-d2/-d3/-d4\" no nome do e-mail é o "
+                "1º/2º/3º/4º envio da sequência, não um cliente novo) — por isso a "
+                "Jornada \"3k\" (nome sugere ~3 mil clientes) soma 11.831 Envios, quase "
+                "4x mais. Confirmado nos dados: cada partição da jornada mantém o "
+                "mesmo volume (~1.000) do d1 ao d4, caindo só pelos poucos que "
+                "descadastraram/bounceram no caminho — é o mesmo público recebendo "
+                "vários e-mails, não um público 4x maior. Por isso os volumes aqui não "
+                "são comparáveis aos das campanhas avulsas de e-mail em ARQUIVOS PARA "
+                "DISPAROS/ (disparo único pra uma lista fixa).",
+            ],
+            color="warning", className="mb-3",
+        ),
         dbc.Row(
             [dbc.Col(_cartao_kpi_estatico(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes],
             className="g-3 mb-3",
@@ -588,6 +606,25 @@ def _aba_conversao_crm() -> html.Div:
                 "selecionada no filtro \"Campanha (UTM) — CRM\" acima.",
             ],
             color="info", className="mb-3",
+        ),
+        html.Div(
+            dbc.Alert(
+                [
+                    html.I(className="bi bi-exclamation-triangle-fill me-2"),
+                    html.B("Ponto de atenção: "),
+                    "os passos \"Envios → Entregues → Aberturas → Cliques\" abaixo vêm "
+                    "do relatório do Salesforce Journey Builder (aba Funil Geral), que é "
+                    "um programa de e-mail separado das campanhas avulsas por trás do "
+                    "\"Home → Autenticação → Oferta → Acordo\" — os dois lados NÃO são "
+                    "cruzados por telefone, então esse funil é uma referência lado a "
+                    "lado (volume de e-mail do período todo + resultado de negociação "
+                    "da campanha selecionada), não um funil rigoroso onde cada etapa é "
+                    "um subconjunto direto da anterior.",
+                ],
+                color="warning", className="mb-3",
+            ),
+            id="alerta-funil-crm-email",
+            style={"display": "none"},
         ),
         dbc.Row([
             dbc.Col(_grafico_card("Funil de Conversão", "grafico-funil-crm", altura="620px"), md=12),

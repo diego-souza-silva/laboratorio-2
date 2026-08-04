@@ -1225,6 +1225,28 @@ def calcular_funil_combinado_whatsapp(
     ])
 
 
+def calcular_funil_combinado_email_salesforce(kpis_email: dict, totais_crm: dict) -> list[dict]:
+    """Funil combinado Envio + CRM do e-mail: continua o funil de engajamento (Envios
+    -> Entregues -> Aberturas -> Cliques, do relatório do Salesforce Journey Builder)
+    direto pro funil de negociação (Home -> Autenticação -> Oferta -> Acordo, do log de
+    CRM das campanhas avulsas em ARQUIVOS PARA DISPAROS/). Diferente dos outros canais,
+    os dois lados NÃO são cruzados por telefone — são fontes de e-mail diferentes (a
+    Jornada do Salesforce roda separada das campanhas avulsas de e-mail), então essa
+    visão é uma referência lado a lado do "volume de e-mail" com o "resultado de
+    negociação do período", não um funil rigoroso onde cada etapa é subconjunto direto
+    da anterior."""
+    return _montar_funil([
+        ("Envios", kpis_email["envios"]),
+        ("Entregues", kpis_email["entregues"]),
+        ("Aberturas", kpis_email["aberturas"]),
+        ("Cliques", kpis_email["cliques"]),
+        ("Home", totais_crm["home"]),
+        ("Autenticação", totais_crm["auth"]),
+        ("Oferta Apresentada", totais_crm["oferta"]),
+        ("Acordo Gerado", totais_crm["acordo"]),
+    ])
+
+
 def _agregar_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
     agrupado = df.groupby(coluna).agg(
         total_disparado=("disparado", "sum"),

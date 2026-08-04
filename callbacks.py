@@ -12,13 +12,15 @@ from data_processing import (
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_sms,
-    calcular_funil_combinado_whatsapp, calcular_funil_whatsapp, calcular_kpis,
-    calcular_kpis_resposta_airys, calcular_kpis_whatsapp, canal_da_campanha, carregar_dados_airys,
-    carregar_dados_crm, carregar_dados_rcs, carregar_dados_rcs_estilo_sms, carregar_dados_sms,
-    carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp, fornecedor_da_campanha,
-    montar_pivot_crm, montar_tabela_frase_com_grupo, montar_tabela_grupo_estrategico_com_ab,
-    montar_tabela_mensagem_com_grupo, salvar_diario_estrategia, total_disparado_campanhas,
+    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_email_salesforce,
+    calcular_funil_combinado_sms, calcular_funil_combinado_whatsapp, calcular_funil_whatsapp,
+    calcular_kpis, calcular_kpis_email_salesforce, calcular_kpis_resposta_airys,
+    calcular_kpis_whatsapp, canal_da_campanha, carregar_dados_airys, carregar_dados_crm,
+    carregar_dados_email_salesforce, carregar_dados_rcs, carregar_dados_rcs_estilo_sms,
+    carregar_dados_sms, carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
+    fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
+    montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
+    salvar_diario_estrategia, total_disparado_campanhas,
 )
 from utils import formatar_numero, formatar_percentual
 
@@ -33,6 +35,11 @@ UTMS_WHATSAPP_AIRYS = [
     u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "whatsapp" and fornecedor_da_campanha(u) == "airys"
 ]
 UTMS_SMS = [u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "sms"]
+
+# Estático (não depende de nenhum filtro): o relatório de e-mail do Salesforce Journey
+# Builder já vem agregado pela própria plataforma, sem telefone/timestamp por
+# destinatário — ver docstring de `carregar_dados_email_salesforce`.
+_KPIS_EMAIL_SALESFORCE = calcular_kpis_email_salesforce(carregar_dados_email_salesforce())
 
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
@@ -327,6 +334,7 @@ def registrar_callbacks(app):
         Output("secao-mensagem-whatsapp", "style"),
         Output("secao-mensagem-rcs", "style"),
         Output("bloco-funil-crm-airys", "style"),
+        Output("alerta-funil-crm-email", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
         Input("btn-canal-rcs", "n_clicks"),
@@ -336,12 +344,12 @@ def registrar_callbacks(app):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         oculto, visivel = {"display": "none"}, {"display": "block"}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto, visivel
+            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto, visivel, oculto
         if ctx.triggered_id == "btn-canal-rcs":
-            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel, oculto
+            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel, oculto, oculto
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto, oculto
-        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto, oculto
+            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto, oculto, visivel
+        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto, oculto, oculto
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -664,6 +672,16 @@ def registrar_callbacks(app):
             )
             grafico_funil_crm_combinado = charts.grafico_funil(
                 calcular_funil_combinado_sms(calcular_kpis(rcs_filtrado_crm), totais_crm),
+                cores=charts.CORES_FUNIL_COMBINADO_SMS, titulo=titulo_funil_crm, altura=560,
+                textposition="outside",
+            )
+        elif canal_crm == "email":
+            # O relatório de e-mail (Salesforce Journey Builder) não cruza por
+            # telefone com o log de CRM das campanhas avulsas — são dois programas de
+            # e-mail diferentes (ver alerta na UI). Envios/Entregues/Aberturas/Cliques
+            # aqui são o total estático do relatório, não filtrado por utms_crm.
+            grafico_funil_crm_combinado = charts.grafico_funil(
+                calcular_funil_combinado_email_salesforce(_KPIS_EMAIL_SALESFORCE, totais_crm),
                 cores=charts.CORES_FUNIL_COMBINADO_SMS, titulo=titulo_funil_crm, altura=560,
                 textposition="outside",
             )
