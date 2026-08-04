@@ -179,7 +179,7 @@ def grafico_volume_utm(df: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Volume por Campanha (UTM)")
 
 
-def grafico_status_sms(kpis: dict) -> go.Figure:
+def grafico_status_sms(kpis: dict, titulo: str = "Status dos SMS") -> go.Figure:
     categorias = ["Disparado", "Enviado", "Entregue", "Falhou"]
     valores = [kpis["disparado"], kpis["enviado"], kpis["entregue"], kpis["falhou"]]
     cores = [CORES["disparado"], CORES["enviado"], CORES["entregue"], CORES["falhou"]]
@@ -192,7 +192,7 @@ def grafico_status_sms(kpis: dict) -> go.Figure:
         )
     )
     fig.update_yaxes(range=[0, max(valores) * 1.18 if valores else 1])
-    return _layout_base(fig, "Status dos SMS")
+    return _layout_base(fig, titulo)
 
 
 def grafico_ranking_campanhas(agregado: pd.DataFrame) -> go.Figure:
@@ -392,8 +392,35 @@ _CORES_SITUACAO_WHATSAPP = {
     "Nao Entregue": CORES["falhou"], "Nao Enviado": "#8B93B8",
 }
 
+_CORES_RESULTADO_RESPOSTA_AIRYS = {
+    "Respondeu": "#3DA9FC",
+    "Interesse em Negociação": "#2ECC71",
+    "Opt-out Confirmado": "#F5A623",
+    "Negativo / Reclamação": "#FF5C5C",
+    "Sem Resposta na Janela": "#8B93B8",
+    "Sem Retorno": "#8B93B8",
+}
 
-def grafico_status_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
+
+def grafico_resultado_resposta_airys(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Resultado da Resposta (sem dados no período)")
+
+    ordenado = agregado.sort_values("quantidade", ascending=True)
+    cores = [_CORES_RESULTADO_RESPOSTA_AIRYS.get(r, "#8B93B8") for r in ordenado["resultado_resposta_norm"]]
+    fig = go.Figure(
+        go.Bar(
+            y=ordenado["resultado_resposta_norm"], x=ordenado["quantidade"], orientation="h",
+            marker_color=cores,
+            text=[formatar_numero(v) for v in ordenado["quantidade"]], textposition="outside",
+            hovertemplate="%{y}: %{x:,}<extra></extra>",
+        )
+    )
+    altura = max(280, 60 * len(ordenado))
+    return _layout_base(fig, "Resultado da Resposta (Airys)", altura=altura)
+
+
+def grafico_status_mensagem_whatsapp(agregado: pd.DataFrame, rotulo_canal: str = "WhatsApp") -> go.Figure:
     if agregado.empty:
         return _layout_base(go.Figure(), "Status de Entrega por Mensagem (sem dados no período)")
 
@@ -407,10 +434,10 @@ def grafico_status_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
         ))
     fig.update_layout(barmode="stack")
     altura = max(280, 70 * len(ordenado))
-    return _layout_base(fig, "Status de Entrega por Mensagem (WhatsApp)", altura=altura)
+    return _layout_base(fig, f"Status de Entrega por Mensagem ({rotulo_canal})", altura=altura)
 
 
-def grafico_crm_por_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
+def grafico_crm_por_mensagem_whatsapp(agregado: pd.DataFrame, rotulo_canal: str = "WhatsApp") -> go.Figure:
     tem_crm = "acordo" in agregado.columns
     if agregado.empty or not tem_crm:
         return _layout_base(go.Figure(), "Resultado de CRM por Mensagem (sem dados no período)")
@@ -426,7 +453,7 @@ def grafico_crm_por_mensagem_whatsapp(agregado: pd.DataFrame) -> go.Figure:
         ))
     fig.update_layout(barmode="group")
     altura = max(280, 70 * len(ordenado))
-    return _layout_base(fig, "Resultado de CRM por Mensagem (WhatsApp)", altura=altura)
+    return _layout_base(fig, f"Resultado de CRM por Mensagem ({rotulo_canal})", altura=altura)
 
 
 def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:

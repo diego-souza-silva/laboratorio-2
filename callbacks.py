@@ -11,17 +11,27 @@ from data_processing import (
     CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
-    agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
+    agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
     agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_sms,
     calcular_funil_combinado_whatsapp, calcular_funil_whatsapp, calcular_kpis,
-    calcular_kpis_whatsapp, carregar_dados_crm, carregar_dados_sms,
-    carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
+    calcular_kpis_resposta_airys, calcular_kpis_whatsapp, canal_da_campanha, carregar_dados_airys,
+    carregar_dados_crm, carregar_dados_rcs, carregar_dados_rcs_estilo_sms, carregar_dados_sms,
+    carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp, fornecedor_da_campanha,
     montar_pivot_crm, montar_tabela_frase_com_grupo, montar_tabela_grupo_estrategico_com_ab,
     montar_tabela_mensagem_com_grupo, salvar_diario_estrategia,
 )
 from utils import formatar_numero, formatar_percentual
 
-CANAL_LABEL_FUNIL = {"sms": "Pós-SMS", "whatsapp": "Pós-WhatsApp", "email": "Pós-Email"}
+CANAL_LABEL_FUNIL = {
+    "sms": "Pós-SMS", "whatsapp": "Pós-WhatsApp", "rcs": "Pós-RCS", "email": "Pós-Email",
+}
+
+UTMS_WHATSAPP_OTIMA = [
+    u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "whatsapp" and fornecedor_da_campanha(u) == "otima"
+]
+UTMS_WHATSAPP_AIRYS = [
+    u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == "whatsapp" and fornecedor_da_campanha(u) == "airys"
+]
 
 COLUNAS_TABELA_EXECUTIVA = [
     "UTM", "Total Disparado", "Total Enviado", "Total Entregue", "Total Falhado",
@@ -310,21 +320,26 @@ def registrar_callbacks(app):
         Output("canal-crm-ativo", "data"),
         Output("btn-canal-sms", "className"),
         Output("btn-canal-whatsapp", "className"),
+        Output("btn-canal-rcs", "className"),
         Output("btn-canal-email", "className"),
         Output("secao-frase-sms", "style"),
         Output("secao-mensagem-whatsapp", "style"),
+        Output("secao-mensagem-rcs", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
+        Input("btn-canal-rcs", "n_clicks"),
         Input("btn-canal-email", "n_clicks"),
     )
-    def alternar_canal_crm(_n_sms, _n_whatsapp, _n_email):
+    def alternar_canal_crm(_n_sms, _n_whatsapp, _n_rcs, _n_email):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         oculto, visivel = {"display": "none"}, {"display": "block"}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo, oculto, visivel
+            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto
+        if ctx.triggered_id == "btn-canal-rcs":
+            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, ativo, oculto, oculto
-        return "sms", ativo, inativo, inativo, visivel, oculto
+            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto
+        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -334,11 +349,25 @@ def registrar_callbacks(app):
         Output("kpi-taxa-envio", "children"),
         Output("kpi-taxa-entrega", "children"),
         Output("kpi-taxa-falha", "children"),
+        Output("kpi-whatsapp-disparado", "children"),
         Output("kpi-whatsapp-entregue", "children"),
         Output("kpi-whatsapp-lido", "children"),
         Output("kpi-whatsapp-enviado", "children"),
         Output("kpi-whatsapp-nao-entregue", "children"),
         Output("kpi-whatsapp-nao-enviado", "children"),
+        Output("kpi-airys-disparado", "children"),
+        Output("kpi-airys-entregue", "children"),
+        Output("kpi-airys-lido", "children"),
+        Output("kpi-airys-enviado", "children"),
+        Output("kpi-airys-nao-entregue", "children"),
+        Output("kpi-airys-respondeu", "children"),
+        Output("kpi-rcs-disparado", "children"),
+        Output("kpi-rcs-enviado", "children"),
+        Output("kpi-rcs-entregue", "children"),
+        Output("kpi-rcs-falhado", "children"),
+        Output("kpi-rcs-taxa-envio", "children"),
+        Output("kpi-rcs-taxa-entrega", "children"),
+        Output("kpi-rcs-taxa-falha", "children"),
         Output("legenda-filtros", "children"),
         Output("grafico-funil", "figure"),
         Output("tabela-funil-detalhe", "children"),
@@ -352,16 +381,39 @@ def registrar_callbacks(app):
         Output("grafico-taxa-entrega", "figure"),
         Output("tabela-executiva-container", "children"),
         Output("tabela-whatsapp-campanha-container", "children"),
+        Output("grafico-funil-airys", "figure"),
+        Output("tabela-funil-airys-detalhe", "children"),
+        Output("grafico-resultado-resposta-airys", "figure"),
+        Output("tabela-airys-campanha-container", "children"),
+        Output("grafico-funil-rcs", "figure"),
+        Output("tabela-funil-rcs-detalhe", "children"),
+        Output("grafico-evolucao-horaria-rcs", "figure"),
+        Output("grafico-evolucao-diaria-rcs", "figure"),
+        Output("grafico-volume-utm-rcs", "figure"),
+        Output("grafico-status-rcs", "figure"),
+        Output("grafico-ranking-campanhas-rcs", "figure"),
+        Output("grafico-taxa-entrega-rcs", "figure"),
+        Output("tabela-executiva-rcs-container", "children"),
         Output("grafico-volume-grupo-ab", "figure"),
         Output("grafico-taxa-entrega-grupo-ab", "figure"),
         Output("tabela-grupo-ab-container", "children"),
         Output("grafico-whatsapp-grupo-ab", "figure"),
         Output("tabela-whatsapp-grupo-ab-container", "children"),
+        Output("grafico-airys-grupo-ab", "figure"),
+        Output("tabela-airys-grupo-ab-container", "children"),
+        Output("grafico-volume-grupo-ab-rcs", "figure"),
+        Output("grafico-taxa-entrega-grupo-ab-rcs", "figure"),
+        Output("tabela-grupo-ab-rcs-container", "children"),
         Output("grafico-volume-grupo-estrategico", "figure"),
         Output("grafico-taxa-entrega-grupo-estrategico", "figure"),
         Output("tabela-grupo-estrategico-container", "children"),
         Output("grafico-whatsapp-grupo-estrategico", "figure"),
         Output("tabela-whatsapp-grupo-estrategico-container", "children"),
+        Output("grafico-airys-grupo-estrategico", "figure"),
+        Output("tabela-airys-grupo-estrategico-container", "children"),
+        Output("grafico-volume-grupo-estrategico-rcs", "figure"),
+        Output("grafico-taxa-entrega-grupo-estrategico-rcs", "figure"),
+        Output("tabela-grupo-estrategico-rcs-container", "children"),
         Output("grafico-taxa-entrega-frase", "figure"),
         Output("grafico-crm-frase", "figure"),
         Output("tabela-frase-container", "children"),
@@ -372,6 +424,16 @@ def registrar_callbacks(app):
         Output("tabela-mensagem-whatsapp-container", "children"),
         Output("tabela-mensagem-whatsapp-grupo-ab-container", "children"),
         Output("tabela-mensagem-whatsapp-grupo-estrategico-container", "children"),
+        Output("grafico-status-mensagem-airys", "figure"),
+        Output("grafico-crm-mensagem-airys", "figure"),
+        Output("tabela-mensagem-airys-container", "children"),
+        Output("tabela-mensagem-airys-grupo-ab-container", "children"),
+        Output("tabela-mensagem-airys-grupo-estrategico-container", "children"),
+        Output("grafico-status-mensagem-rcs", "figure"),
+        Output("grafico-crm-mensagem-rcs", "figure"),
+        Output("tabela-mensagem-rcs-container", "children"),
+        Output("tabela-mensagem-rcs-grupo-ab-container", "children"),
+        Output("tabela-mensagem-rcs-grupo-estrategico-container", "children"),
         Output("kpi-crm-home", "children"),
         Output("kpi-crm-auth", "children"),
         Output("kpi-crm-oferta", "children"),
@@ -425,8 +487,56 @@ def registrar_callbacks(app):
             grupos_estrategicos=grupos_estrategicos,
         )
         agregado_whatsapp_campanha = agregar_whatsapp_por_campanha(
-            whatsapp_filtrado_sem_utm, utms or CAMPANHAS_ESCOPO
+            whatsapp_filtrado_sem_utm,
+            [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_OTIMA],
         )
+
+        airys_completo = carregar_dados_airys()
+        airys_filtrado = filtrar_dados_whatsapp(
+            airys_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
+            hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
+        )
+        kpis_airys = calcular_kpis_whatsapp(airys_filtrado)
+        kpis_resposta_airys = calcular_kpis_resposta_airys(airys_filtrado)
+        etapas_airys = calcular_funil_whatsapp(kpis_airys)
+        agregado_resultado_resposta_airys = agregar_resultado_resposta_airys(airys_filtrado)
+        agregado_airys_grupo_ab = agregar_whatsapp_por_grupo_ab(airys_filtrado)
+        agregado_airys_grupo_estrategico = agregar_whatsapp_por_grupo_estrategico(airys_filtrado)
+
+        airys_filtrado_sem_utm = filtrar_dados_whatsapp(
+            airys_completo, data_ini=data_ini_dt, data_fim=data_fim_dt,
+            hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
+        )
+        agregado_airys_campanha = agregar_whatsapp_por_campanha(
+            airys_filtrado_sem_utm,
+            [u for u in (utms or CAMPANHAS_ESCOPO) if u in UTMS_WHATSAPP_AIRYS],
+        )
+
+        rcs_sms = carregar_dados_rcs_estilo_sms()
+        rcs_sms_filtrado = filtrar_dados(
+            rcs_sms, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
+            hora_ini=hora_ini, hora_fim=hora_fim, status=status, grupos_ab=grupos_ab,
+            grupos_estrategicos=grupos_estrategicos,
+        )
+        kpis_rcs = calcular_kpis(rcs_sms_filtrado)
+        etapas_rcs = calcular_funil(rcs_sms_filtrado)
+        agregado_rcs = (
+            agregar_por_campanha(rcs_sms_filtrado) if not rcs_sms_filtrado.empty
+            else agregar_por_campanha(rcs_sms.iloc[0:0])
+        )
+        agregado_grupo_ab_rcs = (
+            agregar_por_grupo_ab(rcs_sms_filtrado) if not rcs_sms_filtrado.empty
+            else agregar_por_grupo_ab(rcs_sms.iloc[0:0])
+        )
+        agregado_grupo_estrategico_rcs = (
+            agregar_por_grupo_estrategico(rcs_sms_filtrado) if not rcs_sms_filtrado.empty
+            else agregar_por_grupo_estrategico(rcs_sms.iloc[0:0])
+        )
+        linhas_grupo_estrategico_ab_rcs = montar_tabela_grupo_estrategico_com_ab(rcs_sms_filtrado)
+
+        rcs_completo = carregar_dados_rcs()
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
@@ -463,6 +573,8 @@ def registrar_callbacks(app):
         )
         agregado_frase = agregar_frase_com_crm(filtrado, crm_filtrado)
         agregado_mensagem_whatsapp = agregar_mensagem_whatsapp_com_crm(whatsapp_completo, crm_filtrado)
+        agregado_mensagem_airys = agregar_mensagem_whatsapp_com_crm(airys_completo, crm_filtrado)
+        agregado_mensagem_rcs = agregar_mensagem_whatsapp_com_crm(rcs_completo, crm_filtrado)
         totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
             "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
         }
@@ -495,6 +607,17 @@ def registrar_callbacks(app):
                 cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=titulo_funil_crm, altura=560,
                 textposition="outside",
             )
+        elif canal_crm == "rcs":
+            rcs_filtrado_crm = filtrar_dados(
+                rcs_sms, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+                hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
+                grupos_estrategicos=grupos_estrategicos,
+            )
+            grafico_funil_crm_combinado = charts.grafico_funil(
+                calcular_funil_combinado_sms(calcular_kpis(rcs_filtrado_crm), totais_crm),
+                cores=charts.CORES_FUNIL_COMBINADO_SMS, titulo=titulo_funil_crm, altura=560,
+                textposition="outside",
+            )
         else:
             grafico_funil_crm_combinado = charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato"))
 
@@ -503,6 +626,14 @@ def registrar_callbacks(app):
         linhas_mensagem_grupo_ab = montar_tabela_mensagem_com_grupo(whatsapp_completo, crm_filtrado, "grupo_ab")
         linhas_mensagem_grupo_estrategico = montar_tabela_mensagem_com_grupo(
             whatsapp_completo, crm_filtrado, "grupo_estrategico"
+        )
+        linhas_mensagem_airys_grupo_ab = montar_tabela_mensagem_com_grupo(airys_completo, crm_filtrado, "grupo_ab")
+        linhas_mensagem_airys_grupo_estrategico = montar_tabela_mensagem_com_grupo(
+            airys_completo, crm_filtrado, "grupo_estrategico"
+        )
+        linhas_mensagem_rcs_grupo_ab = montar_tabela_mensagem_com_grupo(rcs_completo, crm_filtrado, "grupo_ab")
+        linhas_mensagem_rcs_grupo_estrategico = montar_tabela_mensagem_com_grupo(
+            rcs_completo, crm_filtrado, "grupo_estrategico"
         )
 
         return (
@@ -513,11 +644,25 @@ def registrar_callbacks(app):
             formatar_percentual(kpis["taxa_envio"]),
             formatar_percentual(kpis["taxa_entrega"]),
             formatar_percentual(kpis["taxa_falha"]),
+            formatar_numero(sum(kpis_whatsapp.values())),
             formatar_numero(kpis_whatsapp["Entregue"]),
             formatar_numero(kpis_whatsapp["Lido"]),
             formatar_numero(kpis_whatsapp["Enviado"]),
             formatar_numero(kpis_whatsapp["Nao Entregue"]),
             formatar_numero(kpis_whatsapp["Nao Enviado"]),
+            formatar_numero(sum(kpis_airys.values())),
+            formatar_numero(kpis_airys["Entregue"]),
+            formatar_numero(kpis_airys["Lido"]),
+            formatar_numero(kpis_airys["Enviado"]),
+            formatar_numero(kpis_airys["Nao Entregue"]),
+            formatar_numero(kpis_resposta_airys["respondeu"]),
+            formatar_numero(kpis_rcs["disparado"]),
+            formatar_numero(kpis_rcs["enviado"]),
+            formatar_numero(kpis_rcs["entregue"]),
+            formatar_numero(kpis_rcs["falhou"]),
+            formatar_percentual(kpis_rcs["taxa_envio"]),
+            formatar_percentual(kpis_rcs["taxa_entrega"]),
+            formatar_percentual(kpis_rcs["taxa_falha"]),
             legenda,
             charts.grafico_funil(etapas),
             _tabela_funil_html(etapas),
@@ -534,6 +679,22 @@ def registrar_callbacks(app):
                 charts.formatar_tabela_whatsapp_campanha(agregado_whatsapp_campanha),
                 COLUNAS_TABELA_WHATSAPP_CAMPANHA,
             ),
+            charts.grafico_funil(etapas_airys, cores=["#8B93B8", "#3DA9FC", "#2ECC71", "#0FA968"]),
+            _tabela_funil_html(etapas_airys),
+            charts.grafico_resultado_resposta_airys(agregado_resultado_resposta_airys),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_campanha(agregado_airys_campanha),
+                COLUNAS_TABELA_WHATSAPP_CAMPANHA,
+            ),
+            charts.grafico_funil(etapas_rcs),
+            _tabela_funil_html(etapas_rcs),
+            charts.grafico_evolucao_horaria(rcs_sms_filtrado),
+            charts.grafico_evolucao_diaria(rcs_sms_filtrado),
+            charts.grafico_volume_utm(rcs_sms_filtrado),
+            charts.grafico_status_sms(kpis_rcs, titulo="Status do RCS"),
+            charts.grafico_ranking_campanhas(agregado_rcs),
+            charts.grafico_taxa_entrega_campanha(agregado_rcs),
+            _tabela_component(charts.formatar_tabela_executiva(agregado_rcs), COLUNAS_TABELA_EXECUTIVA),
             charts.grafico_volume_grupo_ab(filtrado),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
@@ -542,6 +703,14 @@ def registrar_callbacks(app):
                 charts.formatar_tabela_whatsapp_grupo_ab(agregado_whatsapp_grupo_ab),
                 COLUNAS_TABELA_WHATSAPP_GRUPO_AB,
             ),
+            charts.grafico_whatsapp_por_grupo_ab(agregado_airys_grupo_ab),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_grupo_ab(agregado_airys_grupo_ab),
+                COLUNAS_TABELA_WHATSAPP_GRUPO_AB,
+            ),
+            charts.grafico_volume_grupo_ab(rcs_sms_filtrado),
+            charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab_rcs),
+            _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab_rcs), COLUNAS_TABELA_GRUPO_AB),
             charts.grafico_volume_grupo_estrategico(filtrado),
             charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico),
             _tabela_grupo_estrategico_ab_component(linhas_grupo_estrategico_ab),
@@ -550,6 +719,14 @@ def registrar_callbacks(app):
                 charts.formatar_tabela_whatsapp_grupo_estrategico(agregado_whatsapp_grupo_estrategico),
                 COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO,
             ),
+            charts.grafico_whatsapp_por_grupo_estrategico(agregado_airys_grupo_estrategico),
+            _tabela_component(
+                charts.formatar_tabela_whatsapp_grupo_estrategico(agregado_airys_grupo_estrategico),
+                COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO,
+            ),
+            charts.grafico_volume_grupo_estrategico(rcs_sms_filtrado),
+            charts.grafico_taxa_entrega_grupo_estrategico(agregado_grupo_estrategico_rcs),
+            _tabela_grupo_estrategico_ab_component(linhas_grupo_estrategico_ab_rcs),
             charts.grafico_taxa_entrega_frase(agregado_frase),
             charts.grafico_crm_por_frase(agregado_frase),
             _tabela_component(charts.formatar_tabela_frase(agregado_frase), COLUNAS_TABELA_FRASE),
@@ -571,6 +748,32 @@ def registrar_callbacks(app):
             ),
             _tabela_texto_grupo_component(
                 linhas_mensagem_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
+                "Mensagem (modelo) / Grupo Estratégico",
+            ),
+            charts.grafico_status_mensagem_whatsapp(agregado_mensagem_airys, rotulo_canal="Airys"),
+            charts.grafico_crm_por_mensagem_whatsapp(agregado_mensagem_airys, rotulo_canal="Airys"),
+            _tabela_component(
+                charts.formatar_tabela_mensagem_whatsapp(agregado_mensagem_airys),
+                COLUNAS_TABELA_MENSAGEM_WHATSAPP,
+            ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_airys_grupo_ab, charts.GRUPO_AB_LABEL, "Template (modelo) / Grupo AB",
+            ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_airys_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
+                "Template (modelo) / Grupo Estratégico",
+            ),
+            charts.grafico_status_mensagem_whatsapp(agregado_mensagem_rcs, rotulo_canal="RCS"),
+            charts.grafico_crm_por_mensagem_whatsapp(agregado_mensagem_rcs, rotulo_canal="RCS"),
+            _tabela_component(
+                charts.formatar_tabela_mensagem_whatsapp(agregado_mensagem_rcs),
+                COLUNAS_TABELA_MENSAGEM_WHATSAPP,
+            ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_rcs_grupo_ab, charts.GRUPO_AB_LABEL, "Mensagem (modelo) / Grupo AB",
+            ),
+            _tabela_texto_grupo_component(
+                linhas_mensagem_rcs_grupo_estrategico, charts.GRUPO_ESTRATEGICO_LABEL,
                 "Mensagem (modelo) / Grupo Estratégico",
             ),
             formatar_numero(totais_crm["home"]),

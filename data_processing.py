@@ -20,6 +20,8 @@ Cada telefone do arquivo de retorno sempre existe na base de disparo corresponde
 """
 from __future__ import annotations
 
+import base64
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -30,6 +32,8 @@ RAIZ_PROJETO = Path(__file__).parent
 DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
 DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
 DIR_RETORNO_WHATSAPP = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP"
+DIR_RETORNO_WHATSAPP_AIRYS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP AIRYS"
+DIR_RETORNO_RCS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO RCS"
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
@@ -114,7 +118,7 @@ GRUPO_ESTRATEGICO_ORDEM = [
     "2_ABANDONO_CARRINHO", "3_CADASTRADO", "4_ENGAJADO", "5_TOPO_FUNIL", NAO_CLASSIFICADO,
 ]
 
-UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "email"]
+UTM_MEDIUM_ORDEM = ["whatsapp", "sms", "rcs", "email"]
 
 _CANAL_POR_FORNECEDOR = {
     "kolmeya": "sms",
@@ -125,17 +129,33 @@ _CANAL_POR_FORNECEDOR = {
 
 
 def canal_da_campanha(utm: str) -> str:
-    """Infere o canal (sms/whatsapp/email) de uma UTM pelo sufixo da plataforma no
-    nome do arquivo de disparo (ex.: "...-kolmeya" -> sms, "...-otima"/"...-airys" ->
-    whatsapp, "...-salesforce" -> email). Usado pra restringir o cruzamento de
-    telefone do retorno de WhatsApp só às campanhas do canal certo — sem isso, uma
-    campanha de SMS que por coincidência compartilhe telefones com uma campanha de
-    WhatsApp (mesma base de clientes, canais diferentes) apareceria com resultado de
-    WhatsApp que não é dela."""
+    """Infere o canal (sms/whatsapp/rcs/email) de uma UTM. RCS é identificado pelo
+    token "RCS" em qualquer parte do nome (ex.: "...topofunildia4RCS-otima") — checado
+    antes do sufixo de fornecedor, já que RCS hoje usa a mesma plataforma/sufixo do
+    WhatsApp Otima ("-otima"). Sem esse token, cai no sufixo da plataforma no nome do
+    arquivo de disparo (ex.: "...-kolmeya" -> sms, "...-otima"/"...-airys" -> whatsapp,
+    "...-salesforce" -> email). Usado pra restringir o cruzamento de telefone do
+    retorno de WhatsApp/RCS só às campanhas do canal certo — sem isso, uma campanha de
+    outro canal que por coincidência compartilhe telefones (mesma base de clientes)
+    apareceria com resultado que não é dela."""
     if not utm:
         return "desconhecido"
+    if "rcs" in utm.lower():
+        return "rcs"
     fornecedor = utm.rsplit("-", 1)[-1].lower()
     return _CANAL_POR_FORNECEDOR.get(fornecedor, "desconhecido")
+
+
+def fornecedor_da_campanha(utm: str) -> str:
+    """Fornecedor/plataforma bruta de uma UTM (sufixo do nome do arquivo de disparo,
+    ex.: "kolmeya"/"otima"/"airys"/"salesforce") — usado pra distinguir WhatsApp Ótima
+    de WhatsApp Airys dentro do mesmo canal "whatsapp" (`canal_da_campanha` agrupa os
+    dois porque CRM/filtros globais tratam WhatsApp como um canal só; a tabela por
+    campanha de cada provedor precisa da distinção fina pra não misturar retorno de um
+    provedor com UTM do outro quando os dois compartilham cliente/telefone)."""
+    if not utm:
+        return "desconhecido"
+    return utm.rsplit("-", 1)[-1].lower()
 
 
 SITUACOES_WHATSAPP = ["Entregue", "Lido", "Enviado", "Nao Entregue", "Nao Enviado"]
@@ -147,9 +167,15 @@ _SITUACAO_WHATSAPP_MAPA = {
     "nao entregue": "Nao Entregue",
     "não enviado": "Nao Enviado",
     "nao enviado": "Nao Enviado",
+    # "Indisponível" é status específico do RCS: dispositivo/app do destinatário não
+    # tem suporte a RCS disponível no momento do envio, então a mensagem não chega —
+    # mesma família de "Não Entregue" (tentativa que falhou, não falta de envio).
+    "indisponível": "Nao Entregue",
+    "indisponivel": "Nao Entregue",
 }
 
 _cache: dict[str, pd.DataFrame] = {}
+_cache_telefones_campanha: dict[str, set] = {}
 
 
 def _detectar_encoding(caminho: Path) -> str:
@@ -417,21 +443,22 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     return df
 
 
-def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o(s) retorno(s) de WhatsApp (Otima/Airys) em `ARQUIVOS DE RETORNO
-    WHATSAPP/` — relatório de entrega por destinatário (Destino/Mensagem/Situação).
-    Usado tanto nos cartões de KPI do WhatsApp na aba Funil Geral (contagem simples de
-    Entregue/Lido/Enviado/Não Entregue/Não Enviado, sem participar do funil de
-    Disparo/Envio/Entrega que é específico do SMS/Kolmeya) quanto na seção "Resultado
-    por Mensagem" da aba Conversão Pós-Contato (CRM), exclusiva da visão Pós-WhatsApp."""
-    if not forcar_reload and "whatsapp_mensagem" in _cache:
-        return _cache["whatsapp_mensagem"]
+def _carregar_retorno_estilo_otima(pasta: Path, cache_key: str, forcar_reload: bool = False) -> pd.DataFrame:
+    """Carrega retorno por destinatário no formato Otima (Destino/Mensagem/Situação/
+    Identificador) de qualquer pasta — reutilizado tanto pelo WhatsApp Otima quanto
+    pelo RCS, que usam exatamente o mesmo formato de exportação (RCS roda na mesma
+    plataforma). Usado nos cartões de KPI (contagem simples de Entregue/Lido/Enviado/
+    Não Entregue/Não Enviado, sem participar do funil de Disparo/Envio/Entrega que é
+    específico do SMS/Kolmeya) e na seção "Resultado por Mensagem" da aba Conversão
+    Pós-Contato (CRM)."""
+    if not forcar_reload and cache_key in _cache:
+        return _cache[cache_key]
 
-    arquivos = sorted(DIR_RETORNO_WHATSAPP.glob("*.csv"))
+    arquivos = sorted(pasta.glob("*.csv"))
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
-        _cache["whatsapp_mensagem"] = df
+        _cache[cache_key] = df
         return df
 
     if "identificador" in df.columns:
@@ -444,7 +471,10 @@ def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFram
     df["mensagem_norm"] = df["mensagem"].apply(normalizar_mensagem_whatsapp)
     df = df[df["telefone_norm"] != ""]
 
-    df["timestamp"] = pd.to_datetime(df["data envio"], format="%d/%m/%Y %H:%M", errors="coerce")
+    # "mixed": o retorno do WhatsApp Otima não traz segundos ("28/07/2026 13:25"), mas o
+    # do RCS traz ("04/08/2026 08:21:53") — um formato fixo faz um dos dois cair 100% em
+    # NaT (já que os dois passam por esse mesmo carregador, ver docstring da função).
+    df["timestamp"] = pd.to_datetime(df["data envio"], format="mixed", dayfirst=True, errors="coerce")
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
@@ -453,8 +483,200 @@ def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFram
     mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
 
-    _cache["whatsapp_mensagem"] = df
+    _cache[cache_key] = df
     return df
+
+
+def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFrame:
+    """Retorno de WhatsApp Otima em `ARQUIVOS DE RETORNO WHATSAPP/` — ver
+    `_carregar_retorno_estilo_otima`."""
+    return _carregar_retorno_estilo_otima(DIR_RETORNO_WHATSAPP, "whatsapp_mensagem", forcar_reload)
+
+
+def carregar_dados_rcs(forcar_reload: bool = False) -> pd.DataFrame:
+    """Retorno de RCS em `ARQUIVOS DE RETORNO RCS/` — mesma plataforma/formato do
+    WhatsApp Otima, ver `_carregar_retorno_estilo_otima`."""
+    return _carregar_retorno_estilo_otima(DIR_RETORNO_RCS, "rcs_mensagem", forcar_reload)
+
+
+_STATUS_FUNIL_A_PARTIR_DE_SITUACAO = {
+    "Entregue": "Entregue",
+    "Lido": "Entregue",
+    "Enviado": "Pendente",
+    "Nao Entregue": "Falhou",
+    "Nao Enviado": "Nao Processado",
+}
+
+
+def _converter_estilo_sms(df: pd.DataFrame, canal: str, cache_key: str, forcar_reload: bool = False) -> pd.DataFrame:
+    """Converte um retorno com granularidade por destinatário (formato WhatsApp/RCS —
+    telefone_norm/situacao_norm) pro mesmo formato linha-a-linha do SMS/Kolmeya
+    (disparado/enviado/entregue/falhou como flags 0/1 por linha, status_funil,
+    utm_campaign), cruzando cada campanha do canal escolhido por telefone (o retorno
+    não traz a UTM da campanha). Isso permite reaproveitar toda a pipeline de
+    agregação/gráficos/tabelas já feita pro SMS (`calcular_kpis`, `calcular_funil`,
+    `agregar_por_campanha`, `agregar_por_grupo_ab`,
+    `montar_tabela_grupo_estrategico_com_ab`, `filtrar_dados`, ...) em qualquer canal
+    que siga esse mesmo formato de retorno — hoje usado pelo RCS, que roda na mesma
+    plataforma do WhatsApp Otima mas deve se comportar exatamente como o SMS."""
+    colunas_vazias = [
+        "telefone_norm", "utm_campaign", "situacao_norm", "grupo_ab", "grupo_estrategico",
+        "mensagem_norm", "disparado", "enviado", "entregue", "falhou", "status_funil",
+        "timestamp", "data", "hora",
+    ]
+    if not forcar_reload and cache_key in _cache:
+        return _cache[cache_key]
+
+    utms_canal = [u for u in CAMPANHAS_ESCOPO if canal_da_campanha(u) == canal]
+    partes = []
+    if not df.empty and utms_canal:
+        for utm in utms_canal:
+            telefones = telefones_das_campanhas([utm])
+            sub = df[df["telefone_norm"].isin(telefones)].copy()
+            if sub.empty:
+                continue
+            sub["utm_campaign"] = utm
+            partes.append(sub)
+
+    if not partes:
+        resultado = pd.DataFrame(columns=colunas_vazias)
+        _cache[cache_key] = resultado
+        return resultado
+
+    resultado = pd.concat(partes, ignore_index=True)
+    # `pd.concat` de vários pedaços às vezes reconverte a coluna "data" (que era
+    # datetime.date por linha, dtype "object") pra datetime64 — o que quebra a
+    # comparação com os `date` do filtro de Período em `filtrar_dados`. Recalcula
+    # direto do timestamp pra garantir o mesmo dtype "object" usado pelo SMS.
+    resultado["data"] = resultado["timestamp"].dt.date
+    resultado["hora"] = resultado["timestamp"].dt.hour
+    resultado["disparado"] = 1
+    resultado["enviado"] = resultado["situacao_norm"].isin(
+        ["Entregue", "Lido", "Enviado", "Nao Entregue"]
+    ).astype(int)
+    resultado["entregue"] = resultado["situacao_norm"].isin(["Entregue", "Lido"]).astype(int)
+    resultado["falhou"] = (resultado["situacao_norm"] == "Nao Entregue").astype(int)
+    resultado["status_funil"] = (
+        resultado["situacao_norm"].map(_STATUS_FUNIL_A_PARTIR_DE_SITUACAO).fillna("Nao Processado")
+    )
+    _cache[cache_key] = resultado
+    return resultado
+
+
+def carregar_dados_rcs_estilo_sms(forcar_reload: bool = False) -> pd.DataFrame:
+    """RCS convertido pro formato linha-a-linha do SMS — ver `_converter_estilo_sms`.
+    Usado na aba Funil Geral e nas abas Grupo AB/Grupo Estratégico, que já são 100%
+    genéricas em relação ao formato desse dataframe."""
+    return _converter_estilo_sms(carregar_dados_rcs(forcar_reload), "rcs", "rcs_estilo_sms", forcar_reload)
+
+
+_STATUS_ATUAL_AIRYS_LABEL = {
+    "read": "Lido",
+    "delivered": "Entregue",
+    "sent": "Enviado",
+    "failed": "Falhou",
+    "rejected": "Rejeitado",
+}
+
+_RESULTADO_RESPOSTA_AIRYS_LABEL = {
+    "sem_resposta_na_janela": "Sem Resposta na Janela",
+    "respondeu": "Respondeu",
+    "interesse_negociacao": "Interesse em Negociação",
+    "opt_out_confirmado": "Opt-out Confirmado",
+    "negativo_reclamacao": "Negativo / Reclamação",
+}
+
+
+def _extrair_telefone_wamid(wamid) -> str:
+    """O `numero_whatsapp` do export do Airys vem truncado (notação científica gerada
+    ao salvar em Excel, ex.: "5,53186E+11"), então o telefone real é extraído
+    decodificando o `provider_message_id` (formato "wamid.<base64>"), que embute o
+    número completo sem perda de precisão."""
+    if not isinstance(wamid, str) or not wamid.startswith("wamid."):
+        return ""
+    corpo = wamid[len("wamid."):]
+    corpo += "=" * (-len(corpo) % 4)
+    try:
+        decodificado = base64.b64decode(corpo).decode("latin1", errors="ignore")
+    except Exception:
+        return ""
+    encontrado = re.search(r"\d{10,13}", decodificado)
+    return encontrado.group(0) if encontrado else ""
+
+
+def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
+    """Carrega o retorno do Airys (AirysChat + Meta Graph API) em `ARQUIVOS DE RETORNO
+    WHATSAPP AIRYS/` — granularidade por destinatário/mensagem, com status detalhado
+    (Entregue/Lido/Enviado/Falhou ou Rejeitado), resposta do cliente (Respondeu após
+    Envio, Resultado da Resposta) e template. O telefone vem de decodificar o
+    `provider_message_id` (ver `_extrair_telefone_wamid`) — a coluna `numero_whatsapp`
+    do export vem truncada. O status é traduzido pro mesmo vocabulário usado no
+    WhatsApp Otima (Entregue/Lido/Enviado/Não Entregue/Não Enviado), reaproveitando
+    toda a agregação/gráficos/tabelas já feitos pra esse formato."""
+    if not forcar_reload and "airys" in _cache:
+        return _cache["airys"]
+
+    arquivos = sorted(DIR_RETORNO_WHATSAPP_AIRYS.glob("*.csv"))
+    partes = [ler_csv_auto(caminho) for caminho in arquivos]
+    df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
+    if df.empty:
+        _cache["airys"] = df
+        return df
+
+    if "provider_message_id" in df.columns:
+        df = df.drop_duplicates("provider_message_id")
+
+    df["telefone_norm"] = (
+        df["provider_message_id"].apply(_extrair_telefone_wamid).apply(_normalizar_telefone_com_ddi)
+    )
+    df = df[df["telefone_norm"] != ""]
+
+    status_norm = df["status_atual"].fillna("").str.strip().str.lower()
+    df["status_atual_label"] = status_norm.map(_STATUS_ATUAL_AIRYS_LABEL).fillna("Não Enviado")
+    df["situacao_norm"] = status_norm.map(
+        {"read": "Lido", "delivered": "Entregue", "sent": "Enviado"}
+    ).fillna("Nao Enviado")
+    falhou = df["falhou_ou_rejeitado"].fillna("").str.strip().str.lower() == "sim"
+    df.loc[falhou, "situacao_norm"] = "Nao Entregue"
+    df.loc[falhou, "status_atual_label"] = "Falhou ou Rejeitado"
+
+    df["mensagem_norm"] = df["template_nome"].fillna("(sem template)")
+    df.loc[df["mensagem_norm"].astype(str).str.strip() == "", "mensagem_norm"] = "(sem template)"
+
+    df["respondeu_apos_envio"] = df["respondeu_apos_envio"].fillna("").str.strip().str.lower() == "sim"
+    resultado_norm = df["resultado_resposta"].fillna("").str.strip()
+    df["resultado_resposta_norm"] = resultado_norm.apply(
+        lambda v: _RESULTADO_RESPOSTA_AIRYS_LABEL.get(v, v) if v else "Sem Retorno"
+    )
+
+    df["timestamp"] = pd.to_datetime(df["enviado_em_brt"], errors="coerce")
+    df["data"] = df["timestamp"].dt.date
+    df["hora"] = df["timestamp"].dt.hour
+
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
+    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+
+    _cache["airys"] = df
+    return df
+
+
+def calcular_kpis_resposta_airys(df: pd.DataFrame) -> dict:
+    """Quantos clientes responderam após o envio, no retorno do Airys."""
+    if df.empty:
+        return {"respondeu": 0, "total": 0}
+    return {"respondeu": int(df["respondeu_apos_envio"].sum()), "total": len(df)}
+
+
+def agregar_resultado_resposta_airys(df: pd.DataFrame) -> pd.DataFrame:
+    """Contagem por resultado da resposta (Sem Resposta na Janela/Respondeu/Interesse
+    em Negociação/Opt-out Confirmado/Negativo-Reclamação/...) do retorno do Airys."""
+    if df.empty:
+        return pd.DataFrame(columns=["resultado_resposta_norm", "quantidade"])
+    contagem = df["resultado_resposta_norm"].value_counts().reset_index()
+    contagem.columns = ["resultado_resposta_norm", "quantidade"]
+    return contagem
 
 
 def telefones_das_campanhas(utms: list[str]) -> set[str]:
@@ -465,18 +687,31 @@ def telefones_das_campanhas(utms: list[str]) -> set[str]:
     interno do fornecedor. Prioriza a coluna `sms_whats` (com DDI, específica do envio
     de WhatsApp/SMS) sobre `telefone` quando o arquivo de disparo tiver as duas — no
     arquivo da Otima elas são idênticas, mas `sms_whats` é a coluna certa caso um
-    arquivo futuro traga números diferentes entre as duas."""
+    arquivo futuro traga números diferentes entre as duas. Cacheado por campanha (não
+    só o resultado final da união): essa função é chamada campanha a campanha em vários
+    pontos do dashboard (tabela por campanha de WhatsApp/Airys/RCS) a cada atualização
+    de filtro, e sem cache reabriria e reparseria o CSV de disparo do zero em cada
+    chamada — com várias campanhas isso é o principal gargalo de performance do
+    callback."""
     campanhas = descobrir_campanhas()
     telefones: set[str] = set()
     for utm in utms:
+        if utm in _cache_telefones_campanha:
+            telefones |= _cache_telefones_campanha[utm]
+            continue
         caminho = campanhas.get(utm)
         if caminho is None:
             continue
         df = ler_csv_auto(caminho)
         if "sms_whats" in df.columns:
-            telefones |= {_normalizar_telefone_com_ddi(v) for v in df["sms_whats"]}
+            telefones_utm = {_normalizar_telefone_com_ddi(v) for v in df["sms_whats"]}
         elif "telefone" in df.columns:
-            telefones |= {normalizar_telefone(v) for v in df["telefone"]}
+            telefones_utm = {normalizar_telefone(v) for v in df["telefone"]}
+        else:
+            telefones_utm = set()
+        telefones_utm.discard("")
+        _cache_telefones_campanha[utm] = telefones_utm
+        telefones |= telefones_utm
     telefones.discard("")
     return telefones
 
@@ -490,17 +725,20 @@ def filtrar_dados_whatsapp(
     hora_fim: int | None = None,
     grupos_ab: list[str] | None = None,
     grupos_estrategicos: list[str] | None = None,
+    canal: str = "whatsapp",
 ) -> pd.DataFrame:
     """Aplica os filtros globais (campanha/período/hora/grupo_ab/grupo_estratégico)
-    sobre o retorno de WhatsApp, restringindo aos telefones das campanhas de WhatsApp
-    selecionadas (campanhas de outro canal são ignoradas, mesmo se selecionadas junto —
-    ver `canal_da_campanha`)."""
+    sobre um retorno com granularidade por destinatário (WhatsApp ou RCS), restringindo
+    aos telefones das campanhas do canal selecionado (campanhas de outro canal são
+    ignoradas, mesmo se selecionadas junto — ver `canal_da_campanha`). `canal` escolhe
+    qual canal filtrar ("whatsapp"/"rcs"), reutilizável pra qualquer canal que siga
+    esse mesmo formato de retorno."""
     filtrado = df
     if utms:
-        utms_whatsapp = [u for u in utms if canal_da_campanha(u) == "whatsapp"]
-        if not utms_whatsapp:
+        utms_canal = [u for u in utms if canal_da_campanha(u) == canal]
+        if not utms_canal:
             return df.iloc[0:0]
-        filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_whatsapp))]
+        filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_canal))]
     if grupos_ab:
         filtrado = filtrado[filtrado["grupo_ab"].isin(grupos_ab)]
     if grupos_estrategicos:
@@ -576,19 +814,19 @@ def agregar_whatsapp_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("ordem").drop(columns="ordem").reset_index(drop=True)
 
 
-def agregar_whatsapp_por_campanha(df: pd.DataFrame, utms: list[str]) -> pd.DataFrame:
-    """Resultado de WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
+def agregar_whatsapp_por_campanha(df: pd.DataFrame, utms: list[str], canal: str = "whatsapp") -> pd.DataFrame:
+    """Resultado de WhatsApp/RCS (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
     campanha, cruzando por telefone — o retorno do Otima não traz a UTM da campanha, só
     o nome interno do fornecedor (mesmo princípio de `telefones_das_campanhas`). Só
-    considera as UTMs que são de fato de WhatsApp (ver `canal_da_campanha`), ordenado
-    da maior para a menor volumetria."""
+    considera as UTMs que são de fato do canal escolhido (ver `canal_da_campanha`),
+    ordenado da maior para a menor volumetria."""
     colunas_vazias = ["utm_campaign", *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
-    utms_whatsapp = [u for u in utms if canal_da_campanha(u) == "whatsapp"]
-    if df.empty or not utms_whatsapp:
+    utms_canal = [u for u in utms if canal_da_campanha(u) == canal]
+    if df.empty or not utms_canal:
         return pd.DataFrame(columns=colunas_vazias)
 
     linhas = []
-    for utm in utms_whatsapp:
+    for utm in utms_canal:
         telefones = telefones_das_campanhas([utm])
         sub = df[df["telefone_norm"].isin(telefones)]
         if sub.empty:
@@ -640,18 +878,12 @@ def agregar_mensagem_whatsapp_com_crm(df_whatsapp: pd.DataFrame, df_crm: pd.Data
     if base.empty or df_crm.empty:
         return base
 
-    validas = df_whatsapp[df_whatsapp["mensagem_norm"] != ""]
-    telefones_por_mensagem = validas.groupby("mensagem_norm")["telefone_norm"].apply(set)
-
-    for i, linha in base.iterrows():
-        telefones = telefones_por_mensagem.get(linha["mensagem_norm"], set())
-        if not telefones:
-            continue
-        sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones)]
-        contagem = sub_crm["acao_norm"].value_counts()
-        for etapa in ETAPAS_CRM:
-            base.at[i, etapa] = int(contagem.get(etapa, 0))
-
+    contagem = _contagem_crm_por_texto(df_whatsapp, "mensagem_norm", df_crm)
+    if contagem.empty:
+        return base
+    base = base.drop(columns=ETAPAS_CRM).merge(contagem, on="mensagem_norm", how="left")
+    for etapa in ETAPAS_CRM:
+        base[etapa] = base[etapa].fillna(0).astype(int)
     return base
 
 
@@ -731,15 +963,20 @@ def _montar_funil(etapas: list[tuple[str, int]]) -> list[dict]:
     return resultado
 
 
-def calcular_funil(df: pd.DataFrame) -> list[dict]:
-    """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou)."""
-    kpis = calcular_kpis(df)
+def calcular_funil_a_partir_de_kpis(kpis: dict) -> list[dict]:
+    """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou) a partir
+    de um dict de KPIs já no formato de `calcular_kpis` — usado por `calcular_funil`."""
     return _montar_funil([
         ("Disparado", kpis["disparado"]),
         ("Enviado", kpis["enviado"]),
         ("Entregue", kpis["entregue"]),
         ("Falhou", kpis["falhou"]),
     ])
+
+
+def calcular_funil(df: pd.DataFrame) -> list[dict]:
+    """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou)."""
+    return calcular_funil_a_partir_de_kpis(calcular_kpis(df))
 
 
 def calcular_funil_whatsapp(kpis_whatsapp: dict) -> list[dict]:
@@ -908,6 +1145,29 @@ def agregar_por_frase(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("total_disparado", ascending=False).reset_index(drop=True)
 
 
+def _contagem_crm_por_texto(df_origem: pd.DataFrame, coluna_texto: str, df_crm: pd.DataFrame) -> pd.DataFrame:
+    """Contagem de ações de CRM (home/auth/oferta/acordo) por texto-modelo (frase de
+    SMS ou mensagem de WhatsApp/Airys/RCS), cruzando telefone com o log de CRM numa
+    única junção + groupby vetorizados — evita repetir um `isin()` + `value_counts()`
+    por linha de `base` (um `for _, linha in base.iterrows(): df_crm[...isin...]`),
+    que fica caro com pandas quando chamado várias vezes por atualização do dashboard
+    (frase de SMS + mensagem de WhatsApp Ótima/Airys/RCS, cada uma com sua própria
+    tabela texto×grupo_ab e texto×grupo_estratégico)."""
+    colunas = [coluna_texto, *ETAPAS_CRM]
+    if df_crm.empty:
+        return pd.DataFrame(columns=colunas)
+    validas = df_origem[df_origem[coluna_texto] != ""]
+    telefone_texto = validas[["telefone_norm", coluna_texto]].drop_duplicates()
+    cruzado = df_crm[["telefone_norm", "acao_norm"]].merge(telefone_texto, on="telefone_norm", how="inner")
+    if cruzado.empty:
+        return pd.DataFrame(columns=colunas)
+    contagem = cruzado.groupby([coluna_texto, "acao_norm"]).size().unstack(fill_value=0)
+    for etapa in ETAPAS_CRM:
+        if etapa not in contagem.columns:
+            contagem[etapa] = 0
+    return contagem[ETAPAS_CRM].reset_index()
+
+
 def agregar_frase_com_crm(df_sms: pd.DataFrame, df_crm: pd.DataFrame) -> pd.DataFrame:
     """Tabela por frase de SMS incluindo o resultado final no CRM (home/auth/oferta/
     acordo): para cada frase, cruza os telefones que a receberam com o log de CRM e
@@ -919,18 +1179,12 @@ def agregar_frase_com_crm(df_sms: pd.DataFrame, df_crm: pd.DataFrame) -> pd.Data
     if base.empty or df_crm.empty:
         return base
 
-    validas = df_sms[df_sms["frase_norm"] != ""]
-    telefones_por_frase = validas.groupby("frase_norm")["telefone_norm"].apply(set)
-
-    for i, linha in base.iterrows():
-        telefones = telefones_por_frase.get(linha["frase_norm"], set())
-        if not telefones:
-            continue
-        sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones)]
-        contagem = sub_crm["acao_norm"].value_counts()
-        for etapa in ETAPAS_CRM:
-            base.at[i, etapa] = int(contagem.get(etapa, 0))
-
+    contagem = _contagem_crm_por_texto(df_sms, "frase_norm", df_crm)
+    if contagem.empty:
+        return base
+    base = base.drop(columns=ETAPAS_CRM).merge(contagem, on="frase_norm", how="left")
+    for etapa in ETAPAS_CRM:
+        base[etapa] = base[etapa].fillna(0).astype(int)
     return base
 
 
@@ -947,7 +1201,21 @@ def _montar_tabela_texto_com_grupo(
 
     ordem = GRUPO_AB_ORDEM if coluna_grupo == "grupo_ab" else GRUPO_ESTRATEGICO_ORDEM
     validas = df_origem[df_origem[coluna_texto] != ""]
-    telefones_por_texto = validas.groupby(coluna_texto)["telefone_norm"].apply(set)
+
+    # Uma única junção telefone->CRM + groupby (em vez de um isin()/value_counts() por
+    # combinação texto×grupo em loop) — ver docstring de `_contagem_crm_por_texto`.
+    contagem_detalhe = pd.DataFrame(columns=[coluna_texto, coluna_grupo, *ETAPAS_CRM])
+    if not df_crm.empty:
+        telefone_textos = validas[["telefone_norm", coluna_texto, coluna_grupo]].drop_duplicates(
+            ["telefone_norm", coluna_texto]
+        )
+        cruzado = df_crm[["telefone_norm", "acao_norm"]].merge(telefone_textos, on="telefone_norm", how="inner")
+        if not cruzado.empty:
+            agrupado = cruzado.groupby([coluna_texto, coluna_grupo, "acao_norm"]).size().unstack(fill_value=0)
+            for etapa in ETAPAS_CRM:
+                if etapa not in agrupado.columns:
+                    agrupado[etapa] = 0
+            contagem_detalhe = agrupado[ETAPAS_CRM].reset_index()
 
     linhas = []
     for _, linha in base.iterrows():
@@ -958,19 +1226,15 @@ def _montar_tabela_texto_com_grupo(
             "oferta": int(linha["oferta"]), "acordo": int(linha["acordo"]),
         })
 
-        telefones = telefones_por_texto.get(texto, set())
-        if not telefones or df_crm.empty:
-            continue
-        sub_origem = validas[validas["telefone_norm"].isin(telefones)]
-        grupos_presentes = [g for g in ordem if g in sub_origem[coluna_grupo].unique()]
-        for grupo in grupos_presentes:
-            telefones_grupo = set(sub_origem[sub_origem[coluna_grupo] == grupo]["telefone_norm"])
-            sub_crm = df_crm[df_crm["telefone_norm"].isin(telefones_grupo)]
-            contagem = sub_crm["acao_norm"].value_counts()
+        sub = contagem_detalhe[contagem_detalhe[coluna_texto] == texto].set_index(coluna_grupo)
+        for grupo in ordem:
+            if grupo not in sub.index:
+                continue
+            linha_grupo = sub.loc[grupo]
             linhas.append({
                 "rotulo": grupo, "nivel": "detalhe",
-                "home": int(contagem.get("home", 0)), "auth": int(contagem.get("auth", 0)),
-                "oferta": int(contagem.get("oferta", 0)), "acordo": int(contagem.get("acordo", 0)),
+                "home": int(linha_grupo["home"]), "auth": int(linha_grupo["auth"]),
+                "oferta": int(linha_grupo["oferta"]), "acordo": int(linha_grupo["acordo"]),
             })
 
     return linhas

@@ -6,8 +6,8 @@ import dash_bootstrap_components as dbc
 
 from data_processing import (
     CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, STATUS_FUNIL_ORDEM,
-    carregar_dados_sms, carregar_dados_whatsapp_mensagem, extremos_data_hora,
-    ler_diario_estrategia,
+    carregar_dados_airys, carregar_dados_rcs, carregar_dados_sms,
+    carregar_dados_whatsapp_mensagem, extremos_data_hora, ler_diario_estrategia,
 )
 from charts import GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, nome_curto
 
@@ -42,12 +42,30 @@ def _linha_kpis() -> html.Div:
         ("kpi-taxa-entrega", "Taxa de Entrega", "bi-graph-up-arrow", "#2ECC71"),
         ("kpi-taxa-falha", "Taxa de Falha", "bi-graph-down", "#FF5C5C"),
     ]
-    cartoes_whatsapp = [
+    cartoes_whatsapp_otima = [
+        ("kpi-whatsapp-disparado", "Total Disparado (Ótima)", "bi-send-fill", "#8B93B8"),
         ("kpi-whatsapp-entregue", "Entregue (não lido)", "bi-check-circle-fill", "#2ECC71"),
         ("kpi-whatsapp-lido", "Lido", "bi-eye-fill", "#2ECC71"),
         ("kpi-whatsapp-enviado", "Pendente", "bi-send-check-fill", "#F5A623"),
         ("kpi-whatsapp-nao-entregue", "Não Entregue", "bi-x-circle-fill", "#FF5C5C"),
         ("kpi-whatsapp-nao-enviado", "Não Enviado", "bi-dash-circle-fill", "#8B93B8"),
+    ]
+    cartoes_whatsapp_airys = [
+        ("kpi-airys-disparado", "Total Disparado (Airys)", "bi-send-fill", "#8B93B8"),
+        ("kpi-airys-entregue", "Entregue", "bi-check-circle-fill", "#2ECC71"),
+        ("kpi-airys-lido", "Lido", "bi-eye-fill", "#2ECC71"),
+        ("kpi-airys-enviado", "Pendente sem Recibo", "bi-send-check-fill", "#F5A623"),
+        ("kpi-airys-nao-entregue", "Falhou ou Rejeitado", "bi-x-circle-fill", "#FF5C5C"),
+        ("kpi-airys-respondeu", "Respondeu após Envio", "bi-reply-fill", "#3DA9FC"),
+    ]
+    cartoes_rcs = [
+        ("kpi-rcs-disparado", "Total Disparado", "bi-send-fill", "#8B93B8"),
+        ("kpi-rcs-enviado", "Total Enviado", "bi-send-check-fill", "#3DA9FC"),
+        ("kpi-rcs-entregue", "Total Entregue", "bi-check-circle-fill", "#2ECC71"),
+        ("kpi-rcs-falhado", "Total Falhado", "bi-x-circle-fill", "#FF5C5C"),
+        ("kpi-rcs-taxa-envio", "Taxa de Envio", "bi-graph-up", "#3DA9FC"),
+        ("kpi-rcs-taxa-entrega", "Taxa de Entrega", "bi-graph-up-arrow", "#2ECC71"),
+        ("kpi-rcs-taxa-falha", "Taxa de Falha", "bi-graph-down", "#FF5C5C"),
     ]
     return html.Div([
         html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
@@ -55,9 +73,19 @@ def _linha_kpis() -> html.Div:
             [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_sms],
             className="g-3 mb-3",
         ),
-        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
+        html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
         dbc.Row(
-            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_whatsapp],
+            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_whatsapp_otima],
+            className="g-3 mb-3",
+        ),
+        html.Span("WhatsApp — Airys", className="rotulo-filtro"),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_whatsapp_airys],
+            className="g-3 mb-3",
+        ),
+        html.Span("RCS (Ótima)", className="rotulo-filtro"),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_rcs],
             className="g-3 mb-3",
         ),
     ])
@@ -65,7 +93,9 @@ def _linha_kpis() -> html.Div:
 
 def _painel_filtros() -> dbc.Card:
     df = carregar_dados_sms()
-    data_min, data_max, hora_min, hora_max = extremos_data_hora(df, carregar_dados_whatsapp_mensagem())
+    data_min, data_max, hora_min, hora_max = extremos_data_hora(
+        df, carregar_dados_whatsapp_mensagem(), carregar_dados_airys(), carregar_dados_rcs(),
+    )
 
     return dbc.Card(
         dbc.CardBody([
@@ -147,37 +177,26 @@ def _grafico_card(titulo: str, id_grafico: str, altura: str = "360px") -> dbc.Ca
     )
 
 
+def _bloco_funil_detalhe(titulo_funil: str, id_funil: str, titulo_detalhe: str, id_detalhe: str) -> dbc.Row:
+    return dbc.Row([
+        dbc.Col(_grafico_card(titulo_funil, id_funil), md=7),
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H6(titulo_detalhe, className="mb-3"),
+                    html.Div(id=id_detalhe),
+                ]),
+                className="cartao-grafico shadow-sm h-100",
+            ),
+            md=5,
+        ),
+    ], className="g-3 mb-3")
+
+
 def _aba_funil_sms() -> html.Div:
     return html.Div([
         html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
-        dbc.Row([
-            dbc.Col(_grafico_card("Funil Geral", "grafico-funil"), md=7),
-            dbc.Col(
-                dbc.Card(
-                    dbc.CardBody([
-                        html.H6("Detalhe por Etapa", className="mb-3"),
-                        html.Div(id="tabela-funil-detalhe"),
-                    ]),
-                    className="cartao-grafico shadow-sm h-100",
-                ),
-                md=5,
-            ),
-        ], className="g-3 mb-3"),
-
-        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
-        dbc.Row([
-            dbc.Col(_grafico_card("Funil de WhatsApp", "grafico-funil-whatsapp"), md=7),
-            dbc.Col(
-                dbc.Card(
-                    dbc.CardBody([
-                        html.H6("Detalhe por Etapa (WhatsApp)", className="mb-3"),
-                        html.Div(id="tabela-funil-whatsapp-detalhe"),
-                    ]),
-                    className="cartao-grafico shadow-sm h-100",
-                ),
-                md=5,
-            ),
-        ], className="g-3 mb-3"),
+        _bloco_funil_detalhe("Funil Geral", "grafico-funil", "Detalhe por Etapa", "tabela-funil-detalhe"),
 
         dbc.Row([
             dbc.Col(_grafico_card("Evolução por Hora", "grafico-evolucao-horaria"), md=6),
@@ -199,14 +218,58 @@ def _aba_funil_sms() -> html.Div:
                 html.H6("Tabela Executiva por Campanha", className="mb-3"),
                 html.Div(id="tabela-executiva-container"),
             ]),
-            className="cartao-grafico shadow-sm mb-3",
+            className="cartao-grafico shadow-sm mb-4",
         ),
 
-        html.Span("WhatsApp (Otima/Airys)", className="rotulo-filtro"),
+        html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
+        _bloco_funil_detalhe(
+            "Funil de WhatsApp (Ótima)", "grafico-funil-whatsapp",
+            "Detalhe por Etapa (Ótima)", "tabela-funil-whatsapp-detalhe",
+        ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva de WhatsApp por Campanha", className="mb-3"),
+                html.H6("Tabela Executiva de WhatsApp por Campanha (Ótima)", className="mb-3"),
                 html.Div(id="tabela-whatsapp-campanha-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("WhatsApp — Airys", className="rotulo-filtro"),
+        _bloco_funil_detalhe(
+            "Funil de WhatsApp (Airys)", "grafico-funil-airys",
+            "Detalhe por Etapa (Airys)", "tabela-funil-airys-detalhe",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Resultado da Resposta (Airys)", "grafico-resultado-resposta-airys"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Campanha (Airys)", className="mb-3"),
+                html.Div(id="tabela-airys-campanha-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("RCS (Ótima)", className="rotulo-filtro"),
+        _bloco_funil_detalhe(
+            "Funil de RCS", "grafico-funil-rcs", "Detalhe por Etapa (RCS)", "tabela-funil-rcs-detalhe",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Evolução por Hora (RCS)", "grafico-evolucao-horaria-rcs"), md=6),
+            dbc.Col(_grafico_card("Evolução Diária (RCS)", "grafico-evolucao-diaria-rcs"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Volume por Campanha (RCS)", "grafico-volume-utm-rcs"), md=6),
+            dbc.Col(_grafico_card("Status do RCS", "grafico-status-rcs"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Ranking de Campanhas (RCS)", "grafico-ranking-campanhas-rcs"), md=6),
+            dbc.Col(_grafico_card("Taxa de Entrega por Campanha (RCS)", "grafico-taxa-entrega-rcs"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Campanha (RCS)", className="mb-3"),
+                html.Div(id="tabela-executiva-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -234,23 +297,42 @@ def _aba_grupo_ab() -> html.Div:
                 html.H6("Tabela Executiva por Grupo AB", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-container"),
             ]),
-            className="cartao-grafico shadow-sm mb-3",
+            className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Alert(
-            [
-                html.I(className="bi bi-whatsapp me-2"),
-                "Resultado de WhatsApp (Otima/Airys) por grupo_ab — aparece ao selecionar "
-                "uma campanha de WhatsApp no filtro \"Campanha (UTM)\".",
-            ],
-            color="secondary", className="mb-3",
-        ),
+
+        html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB", "grafico-whatsapp-grupo-ab"), md=12),
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB (Ótima)", "grafico-whatsapp-grupo-ab"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva de WhatsApp por Grupo AB", className="mb-3"),
+                html.H6("Tabela Executiva de WhatsApp por Grupo AB (Ótima)", className="mb-3"),
                 html.Div(id="tabela-whatsapp-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("WhatsApp — Airys", className="rotulo-filtro"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB (Airys)", "grafico-airys-grupo-ab"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Grupo AB (Airys)", className="mb-3"),
+                html.Div(id="tabela-airys-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("RCS (Ótima)", className="rotulo-filtro"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Volume por Grupo AB (RCS)", "grafico-volume-grupo-ab-rcs"), md=6),
+            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB (RCS)", "grafico-taxa-entrega-grupo-ab-rcs"), md=6),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por Grupo AB (RCS)", className="mb-3"),
+                html.Div(id="tabela-grupo-ab-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -279,23 +361,51 @@ def _aba_grupo_estrategico() -> html.Div:
                 html.H6("Grupo Estratégico × Grupo AB (detalhado)", className="mb-3"),
                 html.Div(id="tabela-grupo-estrategico-container"),
             ]),
-            className="cartao-grafico shadow-sm mb-3",
+            className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Alert(
-            [
-                html.I(className="bi bi-whatsapp me-2"),
-                "Resultado de WhatsApp (Otima/Airys) por grupo_estrategico — aparece ao "
-                "selecionar uma campanha de WhatsApp no filtro \"Campanha (UTM)\".",
-            ],
-            color="secondary", className="mb-3",
-        ),
+
+        html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo Estratégico", "grafico-whatsapp-grupo-estrategico"), md=12),
+            dbc.Col(
+                _grafico_card("Resultado de WhatsApp por Grupo Estratégico (Ótima)", "grafico-whatsapp-grupo-estrategico"),
+                md=12,
+            ),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva de WhatsApp por Grupo Estratégico", className="mb-3"),
+                html.H6("Tabela Executiva de WhatsApp por Grupo Estratégico (Ótima)", className="mb-3"),
                 html.Div(id="tabela-whatsapp-grupo-estrategico-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("WhatsApp — Airys", className="rotulo-filtro"),
+        dbc.Row([
+            dbc.Col(
+                _grafico_card("Resultado de WhatsApp por Grupo Estratégico (Airys)", "grafico-airys-grupo-estrategico"),
+                md=12,
+            ),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva de WhatsApp por Grupo Estratégico (Airys)", className="mb-3"),
+                html.Div(id="tabela-airys-grupo-estrategico-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        html.Span("RCS (Ótima)", className="rotulo-filtro"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Volume por Grupo Estratégico (RCS)", "grafico-volume-grupo-estrategico-rcs"), md=6),
+            dbc.Col(
+                _grafico_card("Taxa de Entrega por Grupo Estratégico (RCS)", "grafico-taxa-entrega-grupo-estrategico-rcs"),
+                md=6,
+            ),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Grupo Estratégico × Grupo AB (RCS, detalhado)", className="mb-3"),
+                html.Div(id="tabela-grupo-estrategico-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -309,14 +419,15 @@ def _aba_conversao_crm() -> html.Div:
                 html.I(className="bi bi-info-circle-fill me-2"),
                 "Seção auxiliar baseada no log de CRM (negociação), não no log de envio. "
                 "Restrita às campanhas cadastradas em ARQUIVOS PARA DISPAROS/. Escolha o "
-                "canal abaixo (Pós-SMS/Pós-WhatsApp/Pós-Email) — mostra o que aconteceu "
-                "depois do clique: Home → Autenticação → Oferta → Acordo.",
+                "canal abaixo (Pós-SMS/Pós-WhatsApp/Pós-RCS/Pós-Email) — mostra o que "
+                "aconteceu depois do clique: Home → Autenticação → Oferta → Acordo.",
             ],
             color="info", className="mb-3",
         ),
         html.Div([
             html.Button("Pós-SMS", id="btn-canal-sms", n_clicks=0, className="aba-botao aba-ativa"),
             html.Button("Pós-WhatsApp", id="btn-canal-whatsapp", n_clicks=0, className="aba-botao"),
+            html.Button("Pós-RCS", id="btn-canal-rcs", n_clicks=0, className="aba-botao"),
             html.Button("Pós-Email", id="btn-canal-email", n_clicks=0, className="aba-botao"),
         ], className="barra-abas mb-3"),
         dbc.Card(
@@ -481,10 +592,106 @@ def _aba_conversao_crm() -> html.Div:
                         html.H6("Resultado por Mensagem × Grupo Estratégico", className="mb-3"),
                         html.Div(id="tabela-mensagem-whatsapp-grupo-estrategico-container"),
                     ]),
+                    className="cartao-grafico shadow-sm mb-4",
+                ),
+
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-whatsapp me-2"),
+                        "Resultado por template do WhatsApp AIRYS (retorno Airys): mesmo "
+                        "processamento acima, aplicado ao provedor Airys — status final de "
+                        "cada envio e o resultado final no CRM, cruzado por telefone.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        _grafico_card(
+                            "Status de Entrega por Template (Airys)",
+                            "grafico-status-mensagem-airys", altura="420px",
+                        ), md=6,
+                    ),
+                    dbc.Col(
+                        _grafico_card(
+                            "Resultado de CRM por Template (Airys)",
+                            "grafico-crm-mensagem-airys", altura="420px",
+                        ), md=6,
+                    ),
+                ], className="g-3 mb-3"),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Tabela Executiva por Template (Airys) — com resultado final", className="mb-3"),
+                        html.Div(id="tabela-mensagem-airys-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Template × Grupo AB (Airys)", className="mb-3"),
+                        html.Div(id="tabela-mensagem-airys-grupo-ab-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Template × Grupo Estratégico (Airys)", className="mb-3"),
+                        html.Div(id="tabela-mensagem-airys-grupo-estrategico-container"),
+                    ]),
                     className="cartao-grafico shadow-sm",
                 ),
             ],
             id="secao-mensagem-whatsapp",
+            style={"display": "none"},
+        ),
+        html.Div(
+            [
+                dbc.Alert(
+                    [
+                        html.I(className="bi bi-broadcast me-2"),
+                        "Resultado por mensagem de RCS (retorno Ótima): mesmo processamento "
+                        "usado no WhatsApp — status final de cada envio (Entregue/Lido/"
+                        "Enviado/Não Entregue/Não Enviado) e o resultado final no CRM "
+                        "(Home/Autenticação/Oferta/Acordo), cruzado por telefone.",
+                    ],
+                    color="secondary", className="mb-3",
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        _grafico_card(
+                            "Status de Entrega por Mensagem (RCS)",
+                            "grafico-status-mensagem-rcs", altura="420px",
+                        ), md=6,
+                    ),
+                    dbc.Col(
+                        _grafico_card(
+                            "Resultado de CRM por Mensagem (RCS)",
+                            "grafico-crm-mensagem-rcs", altura="420px",
+                        ), md=6,
+                    ),
+                ], className="g-3 mb-3"),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Tabela Executiva por Mensagem (RCS) — com resultado final", className="mb-3"),
+                        html.Div(id="tabela-mensagem-rcs-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Mensagem × Grupo AB (RCS)", className="mb-3"),
+                        html.Div(id="tabela-mensagem-rcs-grupo-ab-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm mb-3",
+                ),
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Resultado por Mensagem × Grupo Estratégico (RCS)", className="mb-3"),
+                        html.Div(id="tabela-mensagem-rcs-grupo-estrategico-container"),
+                    ]),
+                    className="cartao-grafico shadow-sm",
+                ),
+            ],
+            id="secao-mensagem-rcs",
             style={"display": "none"},
         ),
     ])
