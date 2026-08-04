@@ -1,15 +1,21 @@
 """Layout Dash/Bootstrap do dashboard executivo (tema escuro, estilo Power BI)."""
 from __future__ import annotations
 
-from dash import dcc, html
+from dash import dash_table, dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
     CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, STATUS_FUNIL_ORDEM,
-    carregar_dados_airys, carregar_dados_rcs, carregar_dados_sms,
-    carregar_dados_whatsapp_mensagem, extremos_data_hora, ler_diario_estrategia,
+    agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
+    calcular_kpis_email_salesforce, carregar_dados_airys, carregar_dados_email_salesforce,
+    carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
+    extremos_data_hora, ler_diario_estrategia,
 )
-from charts import GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, nome_curto
+from charts import (
+    CORES, GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, formatar_tabela_email_salesforce,
+    grafico_funil, grafico_volume_email_por_jornada, nome_curto,
+)
+from utils import formatar_numero, formatar_percentual
 
 STATUS_LABEL = {
     "Entregue": "Entregue",
@@ -29,6 +35,48 @@ def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
             html.H3(id=id_valor, className="kpi-valor", style={"color": cor}),
         ]),
         className="cartao-kpi shadow-sm",
+    )
+
+
+def _cartao_kpi_estatico(valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
+    """Igual `_cartao_kpi`, mas com o valor já calculado no momento em que o layout é
+    montado, sem passar por callback — usado no bloco de Email (Salesforce), cujos
+    dados vêm de um relatório já agregado pela plataforma (sem telefone/timestamp por
+    destinatário) e por isso não respondem aos filtros globais do dashboard."""
+    return dbc.Card(
+        dbc.CardBody([
+            html.Div([
+                html.I(className=f"bi {icone}", style={"color": cor, "fontSize": "1.6rem"}),
+                html.Span(titulo, className="kpi-titulo"),
+            ], className="kpi-cabecalho"),
+            html.H3(valor, className="kpi-valor", style={"color": cor}),
+        ]),
+        className="cartao-kpi shadow-sm",
+    )
+
+
+def _tabela_estatica(registros: list[dict], colunas: list[str]):
+    if not registros:
+        return html.P("Nenhum dado disponível.", className="text-muted")
+    return dash_table.DataTable(
+        data=registros,
+        columns=[{"name": nome, "id": nome} for nome in colunas],
+        sort_action="native",
+        filter_action="native",
+        page_size=15,
+        style_as_list_view=True,
+        style_table={"overflowX": "auto"},
+        style_header={
+            "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
+            "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
+        },
+        style_cell={
+            "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
+            "padding": "10px 12px", "fontSize": "0.85rem",
+        },
+        style_data_conditional=[
+            {"if": {"row_index": "odd"}, "backgroundColor": "#121722"},
+        ],
     )
 
 
@@ -270,6 +318,85 @@ def _aba_funil_sms() -> html.Div:
             dbc.CardBody([
                 html.H6("Tabela Executiva por Campanha (RCS)", className="mb-3"),
                 html.Div(id="tabela-executiva-rcs-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+
+        _bloco_email_salesforce(),
+    ])
+
+
+def _bloco_email_salesforce() -> html.Div:
+    """Bloco de e-mail (Salesforce Journey Builder) na aba Funil Geral. Diferente dos
+    outros blocos, o conteúdo é calculado uma vez aqui (não via callback): o export vem
+    já agregado pela própria plataforma, sem telefone/timestamp por destinatário, então
+    não tem como responder aos filtros globais de campanha/data/hora/grupo_ab."""
+    df = carregar_dados_email_salesforce()
+    kpis = calcular_kpis_email_salesforce(df)
+    etapas = calcular_funil_email_salesforce(kpis)
+    agregado_jornada = agregar_email_salesforce_por_jornada(df)
+
+    cartoes = [
+        (formatar_numero(kpis["envios"]), "Total Envios", "bi-send-fill", "#8B93B8"),
+        (formatar_numero(kpis["entregues"]), "Total Entregues", "bi-check-circle-fill", "#2ECC71"),
+        (formatar_percentual(kpis["taxa_entrega"]), "Taxa de Entrega", "bi-graph-up-arrow", "#2ECC71"),
+        (formatar_percentual(kpis["taxa_bounce"]), "Taxa de Bounce", "bi-x-circle-fill", "#FF5C5C"),
+        (formatar_numero(kpis["aberturas"]), "Total Aberturas", "bi-envelope-open-fill", "#F5A623"),
+        (formatar_percentual(kpis["taxa_abertura"]), "Taxa de Abertura", "bi-eye-fill", "#F5A623"),
+        (formatar_numero(kpis["cliques"]), "Total Cliques", "bi-cursor-fill", "#3DA9FC"),
+        (formatar_percentual(kpis["taxa_ctr"]), "CTR", "bi-graph-up", "#3DA9FC"),
+        (formatar_percentual(kpis["taxa_ctor"]), "CTOR", "bi-bullseye", "#3DA9FC"),
+        (f"{kpis['eficiencia']:.3f}%".replace(".", ","), "Eficiência", "bi-lightning-fill", "#2ECC71"),
+    ]
+
+    return html.Div([
+        html.Span("Email (Salesforce)", className="rotulo-filtro"),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-info-circle-fill me-2"),
+                "Seção baseada no relatório \"Main Metrics\" do Salesforce Journey "
+                "Builder (ARQUIVOS DE RETORNO EMAIL SALESFORCE/) — já vem agregado por "
+                "e-mail/dia pela própria plataforma, sem telefone nem horário por "
+                "destinatário, então não responde aos filtros globais de campanha, "
+                "período, hora ou grupo acima.",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi_estatico(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes],
+            className="g-3 mb-3",
+        ),
+        dbc.Row([
+            dbc.Col(
+                dbc.Card(
+                    dbc.CardBody(dcc.Graph(
+                        figure=grafico_funil(
+                            etapas, cores=[CORES["disparado"], CORES["entregue"], "#F5A623", "#3DA9FC"],
+                            titulo="Funil de Envio (Email Salesforce)",
+                        ),
+                        config={"displayModeBar": False}, style={"height": "360px"},
+                    )),
+                    className="cartao-grafico shadow-sm h-100",
+                ), md=7,
+            ),
+            dbc.Col(
+                dbc.Card(
+                    dbc.CardBody(dcc.Graph(
+                        figure=grafico_volume_email_por_jornada(agregado_jornada),
+                        config={"displayModeBar": False}, style={"height": "360px"},
+                    )),
+                    className="cartao-grafico shadow-sm h-100",
+                ), md=5,
+            ),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Tabela Executiva por E-mail (Salesforce)", className="mb-3"),
+                _tabela_estatica(
+                    formatar_tabela_email_salesforce(df),
+                    ["Jornada", "E-mail", "Assunto", "Envios", "% envios", "Entregues", "Entrega",
+                     "Bounce", "Aberturas", "Abertura", "Cliques", "CTR", "CTOR", "Eficiência"],
+                ),
             ]),
             className="cartao-grafico shadow-sm",
         ),

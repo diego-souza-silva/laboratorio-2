@@ -34,6 +34,7 @@ DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
 DIR_RETORNO_WHATSAPP = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP"
 DIR_RETORNO_WHATSAPP_AIRYS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP AIRYS"
 DIR_RETORNO_RCS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO RCS"
+DIR_RETORNO_EMAIL_SALESFORCE = RAIZ_PROJETO / "ARQUIVOS DE RETORNO EMAIL SALESFORCE"
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
@@ -693,6 +694,147 @@ def agregar_resultado_resposta_airys(df: pd.DataFrame) -> pd.DataFrame:
     return contagem
 
 
+_METRICAS_EMAIL_SALESFORCE = [
+    "Email Sends", "Email Deliveries", "Email Delivery Rate", "Email Total Opens",
+    "Email Unique Opens", "Email Open Rate", "Email Total Clicks", "Email Unique Clicks",
+    "Email Click Rate", "Email Click To Open Rate", "Email Bounces", "Email Bounces - Soft",
+    "Email Bounces - Hard", "Email Bounce Rate", "Email Unique Unsubscribes",
+    "Email Unsubscribe Rate",
+]
+
+
+def _parse_outline_email_salesforce(caminho: Path) -> pd.DataFrame:
+    """Reconstrói o export "Main Metrics" (outline do Salesforce Journey Builder) numa
+    linha por e-mail/dia. O export original vem "achatado": cada e-mail some espalhado
+    em 5 linhas (Activity Name / Job ID / Journey Name / Content Name / Subject), cada
+    uma preenchendo só a sua própria coluna de rótulo — mas repetindo os MESMOS valores
+    de métrica (Sends/Deliveries/Opens/...) nas 5 linhas, já que descrevem o mesmo
+    envio. Linhas com "Journey ID" preenchido são subtotais por jornada (ou o total
+    geral, na última linha) — servem só pra saber a qual jornada os blocos seguintes
+    pertencem, não viram linha própria na tabela final."""
+    df = pd.read_excel(caminho)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    jornada_atual = None
+    linhas = []
+    i, n = 0, len(df)
+    while i < n:
+        linha = df.iloc[i]
+        if pd.notna(linha.get("Journey ID")):
+            jornada_atual = linha.get("Journey ID")
+            i += 1
+            continue
+        bloco = df.iloc[i:i + 5]
+        if len(bloco) < 5:
+            break
+        registro = {
+            "journey_id": jornada_atual,
+            "activity_name": bloco.iloc[0].get("Journey Activity Name"),
+            "job_id": bloco.iloc[1].get("Email Job ID"),
+            "journey_name": bloco.iloc[2].get("Journey Name"),
+            "content_name": bloco.iloc[3].get("Email Content Name"),
+            "subject": bloco.iloc[4].get("Email Subject"),
+        }
+        for coluna in _METRICAS_EMAIL_SALESFORCE:
+            if coluna not in bloco.columns:
+                registro[coluna] = None
+                continue
+            valores = bloco[coluna].dropna().unique()
+            registro[coluna] = valores[0] if len(valores) else None
+        # Se não achou um Job ID de verdade nesse bloco, os 5 linhas não são um e-mail
+        # (ex.: linha "Total" no fim do arquivo) — descarta em vez de virar lixo na tabela.
+        if pd.isna(registro["job_id"]):
+            i += 1
+            continue
+        linhas.append(registro)
+        i += 5
+
+    return pd.DataFrame(linhas)
+
+
+def carregar_dados_email_salesforce(forcar_reload: bool = False) -> pd.DataFrame:
+    """Carrega o(s) export(s) "Main Metrics" do Salesforce Journey Builder em
+    ARQUIVOS DE RETORNO EMAIL SALESFORCE/*.xlsx (todo arquivo da pasta é somado) —
+    métricas de engajamento por e-mail/dia (Envios/Entregues/Aberturas/Cliques/Bounce),
+    bem diferentes do resto do dashboard (aqui não tem telefone nem timestamp por
+    destinatário, é um relatório já agregado pela própria plataforma), então essa
+    seção não responde aos filtros globais de campanha/data/hora/grupo_ab."""
+    if not forcar_reload and "email_salesforce" in _cache:
+        return _cache["email_salesforce"]
+
+    arquivos = sorted(DIR_RETORNO_EMAIL_SALESFORCE.glob("*.xlsx"))
+    partes = [_parse_outline_email_salesforce(caminho) for caminho in arquivos]
+    df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
+    if df.empty:
+        _cache["email_salesforce"] = df
+        return df
+
+    total_envios = df["Email Sends"].sum()
+    df["Jornada"] = df["journey_name"]
+    df["E-mail"] = df["activity_name"]
+    df["Assunto"] = df["subject"]
+    df["Envios"] = df["Email Sends"].astype(int)
+    df["% envios"] = (df["Email Sends"] / total_envios * 100) if total_envios else 0.0
+    df["Entregues"] = df["Email Deliveries"].astype(int)
+    df["Entrega"] = df["Email Delivery Rate"] * 100
+    df["Bounce"] = df["Email Bounce Rate"] * 100
+    df["Aberturas"] = df["Email Unique Opens"].astype(int)
+    df["Abertura"] = df["Email Open Rate"] * 100
+    df["Cliques"] = df["Email Unique Clicks"].astype(int)
+    df["CTR"] = df["Email Click Rate"] * 100
+    df["CTOR"] = df["Email Click To Open Rate"] * 100
+    df["Eficiência"] = df["Entrega"] * df["Abertura"] * df["CTOR"] / 10_000
+
+    df = df.sort_values(["Jornada", "Envios"], ascending=[True, False]).reset_index(drop=True)
+    _cache["email_salesforce"] = df
+    return df
+
+
+def calcular_kpis_email_salesforce(df: pd.DataFrame) -> dict:
+    """KPIs gerais (linha "Total Geral") do e-mail Salesforce, mesmas fórmulas usadas
+    linha a linha em `carregar_dados_email_salesforce` — Entrega/Abertura/CTR/CTOR
+    recalculados sobre os totais somados, não a média das taxas de cada e-mail."""
+    vazio = {
+        "envios": 0, "entregues": 0, "taxa_entrega": 0.0, "bounces": 0, "taxa_bounce": 0.0,
+        "aberturas": 0, "taxa_abertura": 0.0, "cliques": 0, "taxa_ctr": 0.0, "taxa_ctor": 0.0,
+        "eficiencia": 0.0,
+    }
+    if df.empty:
+        return vazio
+
+    envios = int(df["Envios"].sum())
+    entregues = int(df["Entregues"].sum())
+    aberturas = int(df["Aberturas"].sum())
+    cliques = int(df["Cliques"].sum())
+    bounces = int(df["Email Bounces"].sum())
+    taxa_entrega = taxa(entregues, envios)
+    taxa_abertura = taxa(aberturas, entregues)
+    taxa_ctr = taxa(cliques, entregues)
+    taxa_ctor = taxa(cliques, aberturas)
+    return {
+        "envios": envios,
+        "entregues": entregues,
+        "taxa_entrega": taxa_entrega,
+        "bounces": bounces,
+        "taxa_bounce": taxa(bounces, envios),
+        "aberturas": aberturas,
+        "taxa_abertura": taxa_abertura,
+        "cliques": cliques,
+        "taxa_ctr": taxa_ctr,
+        "taxa_ctor": taxa_ctor,
+        "eficiencia": taxa_entrega * taxa_abertura * taxa_ctor / 10_000,
+    }
+
+
+def agregar_email_salesforce_por_jornada(df: pd.DataFrame) -> pd.DataFrame:
+    """Soma Envios/Entregues/Aberturas/Cliques por Jornada, ordenada da maior pra
+    menor volumetria — usado no gráfico de volume por jornada."""
+    if df.empty:
+        return pd.DataFrame(columns=["Jornada", "Envios", "Entregues", "Aberturas", "Cliques"])
+    agrupado = df.groupby("Jornada", as_index=False)[["Envios", "Entregues", "Aberturas", "Cliques"]].sum()
+    return agrupado.sort_values("Envios", ascending=False).reset_index(drop=True)
+
+
 def telefones_das_campanhas(utms: list[str]) -> set[str]:
     """Telefones (normalizados) das campanhas selecionadas, direto do arquivo de
     disparo — usado para ligar o retorno de canais sem vínculo automático por job (ex.:
@@ -1001,6 +1143,18 @@ def calcular_funil_a_partir_de_kpis(kpis: dict) -> list[dict]:
 def calcular_funil(df: pd.DataFrame) -> list[dict]:
     """Monta as 4 etapas do funil (Disparado -> Enviado -> Entregue -> Falhou)."""
     return calcular_funil_a_partir_de_kpis(calcular_kpis(df))
+
+
+def calcular_funil_email_salesforce(kpis_email: dict) -> list[dict]:
+    """Monta as 4 etapas do funil de e-mail (Envios -> Entregues -> Aberturas ->
+    Cliques) a partir de `calcular_kpis_email_salesforce` — sem "Falhou" como no SMS,
+    já que aqui o equivalente (Bounce) já aparece como KPI/taxa à parte."""
+    return _montar_funil([
+        ("Envios", kpis_email["envios"]),
+        ("Entregues", kpis_email["entregues"]),
+        ("Aberturas", kpis_email["aberturas"]),
+        ("Cliques", kpis_email["cliques"]),
+    ])
 
 
 def calcular_funil_whatsapp(kpis_whatsapp: dict) -> list[dict]:

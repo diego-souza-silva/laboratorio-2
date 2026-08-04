@@ -671,3 +671,42 @@ def formatar_tabela_executiva(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         })
     return registros
+
+
+def grafico_volume_email_por_jornada(agregado: pd.DataFrame) -> go.Figure:
+    if agregado.empty:
+        return _layout_base(go.Figure(), "Volume por Jornada (sem dados)")
+
+    ordenado = agregado.sort_values("Envios", ascending=True)
+    rotulos = [j.replace("Casas Bahia - Laboratório - ", "") for j in ordenado["Jornada"]]
+    fig = go.Figure(
+        go.Bar(
+            y=rotulos, x=ordenado["Envios"], orientation="h",
+            marker_color=CORES["disparado"],
+            text=[formatar_numero(v) for v in ordenado["Envios"]], textposition="outside",
+            hovertemplate="%{y}<br>Envios: %{x:,}<extra></extra>",
+        )
+    )
+    return _layout_base(fig, "Volume de Envios por Jornada")
+
+
+def formatar_tabela_email_salesforce(df: pd.DataFrame) -> list[dict]:
+    registros = []
+    for _, linha in df.iterrows():
+        registros.append({
+            "Jornada": linha["Jornada"].replace("Casas Bahia - Laboratório - ", ""),
+            "E-mail": linha["E-mail"],
+            "Assunto": _truncar_frase(linha["Assunto"], 60),
+            "Envios": formatar_numero(linha["Envios"]),
+            "% envios": formatar_percentual(linha["% envios"]),
+            "Entregues": formatar_numero(linha["Entregues"]),
+            "Entrega": formatar_percentual(linha["Entrega"]),
+            "Bounce": formatar_percentual(linha["Bounce"]),
+            "Aberturas": formatar_numero(linha["Aberturas"]),
+            "Abertura": formatar_percentual(linha["Abertura"]),
+            "Cliques": formatar_numero(linha["Cliques"]),
+            "CTR": formatar_percentual(linha["CTR"]),
+            "CTOR": formatar_percentual(linha["CTOR"]),
+            "Eficiência": f"{linha['Eficiência']:.3f}%".replace(".", ","),
+        })
+    return registros
