@@ -98,14 +98,26 @@ def _layout_base(fig: go.Figure, titulo: str | None = None, altura: int = 340) -
 def grafico_funil(
     etapas: list[dict], cores: list[str] | None = None,
     titulo: str | None = None, altura: int = 360, textposition: str = "inside",
+    modo_percentual: str = "base",
 ) -> go.Figure:
+    """`modo_percentual="base"` (padrão, usado na aba Funil Geral) mostra o % de cada
+    etapa sobre a etapa inicial do funil; `modo_percentual="etapa"` (usado na aba
+    Conversão Pós-Contato) mostra o % sobre a etapa imediatamente anterior — mais
+    representativo da conversão entre estágios do que da base total."""
     nomes = [e["etapa"] for e in etapas]
     valores = [e["quantidade"] for e in etapas]
-    textos = [
-        f"<b>{formatar_numero(e['quantidade'])}</b><br>"
-        f"{formatar_percentual(e['percentual_base'])} da base"
-        for e in etapas
-    ]
+    if modo_percentual == "etapa":
+        textos = [
+            f"<b>{formatar_numero(e['quantidade'])}</b><br>"
+            f"{formatar_percentual(e['conversao'])} da etapa anterior"
+            for e in etapas
+        ]
+    else:
+        textos = [
+            f"<b>{formatar_numero(e['quantidade'])}</b><br>"
+            f"{formatar_percentual(e['percentual_base'])} da base"
+            for e in etapas
+        ]
     cores = cores or [CORES["disparado"], CORES["enviado"], CORES["entregue"], CORES["falhou"]]
 
     fig = go.Figure(
@@ -599,9 +611,9 @@ def grafico_crm_por_campanha(crm_agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Ações de CRM por Campanha")
 
 
-def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame) -> go.Figure:
+def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame, titulo: str = "Ações de CRM por Grupo AB") -> go.Figure:
     if crm_agregado.empty:
-        return _layout_base(go.Figure(), "Conversão por Grupo AB (sem dados no período)")
+        return _layout_base(go.Figure(), f"{titulo} (sem dados no período)")
 
     ordem = [g for g in GRUPO_AB_ORDEM if g in crm_agregado["grupo_ab"].values]
     crm_agregado = crm_agregado.set_index("grupo_ab").reindex(ordem).reset_index()
@@ -614,7 +626,22 @@ def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame) -> go.Figure:
             marker_color=cores_etapa[etapa],
         ))
     fig.update_layout(barmode="group")
-    return _layout_base(fig, "Ações de CRM por Grupo AB")
+    return _layout_base(fig, titulo)
+
+
+def formatar_tabela_crm_grupo_ab(crm_agregado: pd.DataFrame) -> list[dict]:
+    """Tabela simples Grupo AB -> Home/Autenticação/Oferta/Acordo, reutilizada pelos
+    blocos por canal (SMS/WhatsApp Ótima/Airys/RCS) da aba Funil por Grupo AB."""
+    registros = []
+    for _, linha in crm_agregado.iterrows():
+        registros.append({
+            "Grupo AB": GRUPO_AB_LABEL.get(linha["grupo_ab"], linha["grupo_ab"]),
+            "Home": formatar_numero(linha["home"]),
+            "Autenticação": formatar_numero(linha["auth"]),
+            "Oferta": formatar_numero(linha["oferta"]),
+            "Acordo": formatar_numero(linha["acordo"]),
+        })
+    return registros
 
 
 def grafico_crm_por_grupo_estrategico(crm_agregado: pd.DataFrame) -> go.Figure:

@@ -116,6 +116,13 @@ def _linha_kpis() -> html.Div:
         ("kpi-rcs-taxa-falha", "Taxa de Falha", "bi-graph-down", "#FF5C5C"),
     ]
     return html.Div([
+        html.Span("Todos os Canais", className="rotulo-filtro"),
+        dbc.Row(
+            [dbc.Col(_cartao_kpi(
+                "kpi-clientes-unicos", "Clientes Únicos (Disparados)", "bi-people-fill", "#3DA9FC",
+            ), xs=12, sm=6, md=4, lg=3)],
+            className="g-3 mb-3",
+        ),
         html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row(
             [dbc.Col(_cartao_kpi(*c), xs=12, sm=6, md=4, lg=True) for c in cartoes_sms],
@@ -444,6 +451,16 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Funil Pós-Contato por Grupo AB (SMS)", "grafico-crm-grupo-ab-sms"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (SMS)", className="mb-3"),
+                html.Div(id="tabela-crm-grupo-ab-sms-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
 
         html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
         dbc.Row([
@@ -453,6 +470,19 @@ def _aba_grupo_ab() -> html.Div:
             dbc.CardBody([
                 html.H6("Tabela Executiva de WhatsApp por Grupo AB (Ótima)", className="mb-3"),
                 html.Div(id="tabela-whatsapp-grupo-ab-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+        dbc.Row([
+            dbc.Col(
+                _grafico_card("Funil Pós-Contato por Grupo AB (WhatsApp Ótima)", "grafico-crm-grupo-ab-whatsapp"),
+                md=12,
+            ),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Ótima)", className="mb-3"),
+                html.Div(id="tabela-crm-grupo-ab-whatsapp-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
@@ -468,6 +498,19 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
+        dbc.Row([
+            dbc.Col(
+                _grafico_card("Funil Pós-Contato por Grupo AB (WhatsApp Airys)", "grafico-crm-grupo-ab-airys"),
+                md=12,
+            ),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Airys)", className="mb-3"),
+                html.Div(id="tabela-crm-grupo-ab-airys-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
 
         html.Span("RCS (Ótima)", className="rotulo-filtro"),
         dbc.Row([
@@ -478,6 +521,16 @@ def _aba_grupo_ab() -> html.Div:
             dbc.CardBody([
                 html.H6("Tabela Executiva por Grupo AB (RCS)", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-rcs-container"),
+            ]),
+            className="cartao-grafico shadow-sm mb-4",
+        ),
+        dbc.Row([
+            dbc.Col(_grafico_card("Funil Pós-Contato por Grupo AB (RCS)", "grafico-crm-grupo-ab-rcs"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (RCS)", className="mb-3"),
+                html.Div(id="tabela-crm-grupo-ab-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
         ),
@@ -592,10 +645,31 @@ def _aba_conversao_crm() -> html.Div:
             className="cartao-filtros shadow-sm mb-3",
         ),
         dbc.Row([
-            dbc.Col(_cartao_kpi("kpi-crm-home", "Home", "bi-house-door-fill", "#8B93B8"), md=3),
-            dbc.Col(_cartao_kpi("kpi-crm-auth", "Autenticação", "bi-shield-lock-fill", "#3DA9FC"), md=3),
-            dbc.Col(_cartao_kpi("kpi-crm-oferta", "Oferta Apresentada", "bi-tag-fill", "#F5A623"), md=3),
-            dbc.Col(_cartao_kpi("kpi-crm-acordo", "Acordo Gerado", "bi-file-earmark-check-fill", "#2ECC71"), md=3),
+            dbc.Col(_cartao_kpi("kpi-crm-home", "Home", "bi-house-door-fill", "#8B93B8"), xs=12, sm=6, md=4, lg=True),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-auth", "Autenticação", "bi-shield-lock-fill", "#3DA9FC"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-oferta", "Oferta Apresentada", "bi-tag-fill", "#F5A623"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-acordo", "Acordo Gerado", "bi-file-earmark-check-fill", "#2ECC71"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-taxa-entrega", "Taxa de Entrega", "bi-graph-up-arrow", "#2ECC71"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-home-vs-entrega", "Home vs Entrega", "bi-signpost-split-fill", "#3DA9FC"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-crm-entregue-por-home", "Entregue por Home", "bi-arrow-repeat", "#F5A623"),
+                xs=12, sm=6, md=4, lg=True,
+            ),
         ], className="g-3 mb-3"),
         dbc.Alert(
             [
