@@ -467,17 +467,13 @@ def registrar_callbacks(app):
         Output("tabela-crm-pivot-container", "children"),
         Output("tabela-crm-pivot-estrategico-container", "children"),
         Output("kpi-clientes-unicos", "children"),
-        Output("grafico-crm-grupo-ab-sms", "figure"),
         Output("tabela-crm-grupo-ab-sms-container", "children"),
-        Output("grafico-crm-grupo-ab-whatsapp", "figure"),
         Output("tabela-crm-grupo-ab-whatsapp-container", "children"),
-        Output("grafico-crm-grupo-ab-airys", "figure"),
         Output("tabela-crm-grupo-ab-airys-container", "children"),
-        Output("grafico-crm-grupo-ab-rcs", "figure"),
         Output("tabela-crm-grupo-ab-rcs-container", "children"),
         Output("kpi-crm-taxa-entrega", "children"),
-        Output("kpi-crm-home-vs-entrega", "children"),
-        Output("kpi-crm-entregue-por-home", "children"),
+        Output("kpi-crm-home-vs-etapa", "children"),
+        Output("kpi-crm-home-vs-etapa-titulo", "children"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -640,7 +636,8 @@ def registrar_callbacks(app):
                 textposition="outside", modo_percentual="etapa",
             )
             taxa_entrega_crm = kpis_crm_sms["taxa_entrega"]
-            entregue_crm_total = kpis_crm_sms["entregue"]
+            home_vs_etapa_titulo = "Home vs Entrega"
+            home_vs_etapa_valor = taxa(totais_crm["home"], kpis_crm_sms["entregue"])
         elif canal_crm == "whatsapp":
             # Ótima e Airys têm cada um seu próprio retorno (whatsapp_completo é só
             # Ótima, airys_completo é só Airys), seu próprio Total Disparado (o
@@ -702,20 +699,38 @@ def registrar_callbacks(app):
             )
             entregue_crm_total = entregue_otima + entregue_airys
             taxa_entrega_crm = taxa(entregue_crm_total, enviado_otima + enviado_airys)
+            lido_crm_total = kpis_whatsapp_otima_crm["Lido"] + kpis_whatsapp_airys_crm["Lido"]
+            home_vs_etapa_titulo = "Home vs Lido"
+            home_vs_etapa_valor = taxa(totais_crm["home"], lido_crm_total)
         elif canal_crm == "rcs":
-            rcs_filtrado_crm = filtrar_dados(
-                rcs_sms, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
+            # O retorno de RCS segue o mesmo formato Otima-schema do WhatsApp Ótima (ver
+            # `_carregar_retorno_estilo_otima`), então também distingue "Lido" de
+            # "Entregue" — usa o mesmo pipeline estilo WhatsApp (não o estilo SMS) pra
+            # aproveitar essa etapa extra no funil, igual já é feito pro WhatsApp.
+            utms_crm_rcs = [u for u in (utms_crm or CAMPANHAS_ESCOPO) if u in UTMS_RCS]
+            rcs_filtrado_crm = filtrar_dados_whatsapp(
+                rcs_completo, utms=utms_crm_rcs, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-                grupos_estrategicos=grupos_estrategicos,
+                grupos_estrategicos=grupos_estrategicos, canal="rcs",
             )
-            kpis_crm_rcs = calcular_kpis(rcs_filtrado_crm)
+            kpis_crm_rcs = calcular_kpis_whatsapp(rcs_filtrado_crm)
             grafico_funil_crm_combinado = charts.grafico_funil(
-                calcular_funil_combinado_sms(kpis_crm_rcs, totais_crm),
-                cores=charts.CORES_FUNIL_COMBINADO_SMS, titulo=titulo_funil_crm, altura=560,
+                calcular_funil_combinado_whatsapp(
+                    kpis_crm_rcs, totais_crm, total_disparado=total_disparado_campanhas(utms_crm_rcs),
+                ),
+                cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=titulo_funil_crm, altura=560,
                 textposition="outside", modo_percentual="etapa",
             )
-            taxa_entrega_crm = kpis_crm_rcs["taxa_entrega"]
-            entregue_crm_total = kpis_crm_rcs["entregue"]
+            entregue_crm_total = kpis_crm_rcs["Entregue"] + kpis_crm_rcs["Lido"]
+            enviado_crm_total = entregue_crm_total + kpis_crm_rcs["Enviado"] + kpis_crm_rcs["Nao Entregue"]
+            taxa_entrega_crm = taxa(entregue_crm_total, enviado_crm_total)
+            lido_crm_total = kpis_crm_rcs["Lido"]
+            if lido_crm_total > 0:
+                home_vs_etapa_titulo = "Home vs Lido"
+                home_vs_etapa_valor = taxa(totais_crm["home"], lido_crm_total)
+            else:
+                home_vs_etapa_titulo = "Home vs Entrega"
+                home_vs_etapa_valor = taxa(totais_crm["home"], entregue_crm_total)
         elif canal_crm == "email":
             # O relatório de e-mail (Salesforce Journey Builder) não cruza por
             # telefone com o log de CRM das campanhas avulsas — são dois programas de
@@ -727,14 +742,13 @@ def registrar_callbacks(app):
                 textposition="outside", modo_percentual="etapa",
             )
             taxa_entrega_crm = _KPIS_EMAIL_SALESFORCE["taxa_entrega"]
-            entregue_crm_total = _KPIS_EMAIL_SALESFORCE["entregues"]
+            home_vs_etapa_titulo = "Home vs Aberturas"
+            home_vs_etapa_valor = taxa(totais_crm["home"], _KPIS_EMAIL_SALESFORCE["aberturas"])
         else:
             grafico_funil_crm_combinado = charts.grafico_funil_crm(crm_agregado, CANAL_LABEL_FUNIL.get(canal_crm, "Pós-Contato"))
             taxa_entrega_crm = 0.0
-            entregue_crm_total = 0
-
-        home_vs_entrega_crm = taxa(totais_crm["home"], entregue_crm_total)
-        entregue_por_home_crm = taxa(entregue_crm_total, totais_crm["home"])
+            home_vs_etapa_titulo = "Home vs Entrega"
+            home_vs_etapa_valor = 0.0
 
         # Clientes únicos que receberam disparo em qualquer canal (SMS/WhatsApp
         # Ótima/Airys/RCS), respeitando os filtros globais — telefone deduplicado, sem
@@ -846,20 +860,20 @@ def registrar_callbacks(app):
             charts.grafico_ranking_campanhas(agregado_rcs),
             charts.grafico_taxa_entrega_campanha(agregado_rcs),
             _tabela_component(charts.formatar_tabela_executiva(agregado_rcs), COLUNAS_TABELA_EXECUTIVA),
-            charts.grafico_volume_grupo_ab(filtrado),
+            charts.grafico_volume_grupo_ab(filtrado, crm_grupo_ab_sms),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab), COLUNAS_TABELA_GRUPO_AB),
-            charts.grafico_whatsapp_por_grupo_ab(agregado_whatsapp_grupo_ab),
+            charts.grafico_whatsapp_por_grupo_ab(agregado_whatsapp_grupo_ab, crm_grupo_ab_otima),
             _tabela_component(
                 charts.formatar_tabela_whatsapp_grupo_ab(agregado_whatsapp_grupo_ab),
                 COLUNAS_TABELA_WHATSAPP_GRUPO_AB,
             ),
-            charts.grafico_whatsapp_por_grupo_ab(agregado_airys_grupo_ab),
+            charts.grafico_whatsapp_por_grupo_ab(agregado_airys_grupo_ab, crm_grupo_ab_airys),
             _tabela_component(
                 charts.formatar_tabela_whatsapp_grupo_ab(agregado_airys_grupo_ab),
                 COLUNAS_TABELA_WHATSAPP_GRUPO_AB,
             ),
-            charts.grafico_volume_grupo_ab(rcs_sms_filtrado),
+            charts.grafico_volume_grupo_ab(rcs_sms_filtrado, crm_grupo_ab_rcs),
             charts.grafico_taxa_entrega_grupo_ab(agregado_grupo_ab_rcs),
             _tabela_component(charts.formatar_tabela_grupo_ab(agregado_grupo_ab_rcs), COLUNAS_TABELA_GRUPO_AB),
             charts.grafico_volume_grupo_estrategico(filtrado),
@@ -942,31 +956,23 @@ def registrar_callbacks(app):
                 titulo_coluna="Ação / Grupo Estratégico", mapa_label=charts.GRUPO_ESTRATEGICO_LABEL,
             ),
             formatar_numero(clientes_unicos_disparados),
-            charts.grafico_crm_por_grupo_ab(crm_grupo_ab_sms, titulo="Funil Pós-Contato por Grupo AB (SMS)"),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_sms),
                 ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
-            ),
-            charts.grafico_crm_por_grupo_ab(
-                crm_grupo_ab_otima, titulo="Funil Pós-Contato por Grupo AB (WhatsApp Ótima)",
             ),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_otima),
                 ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
             ),
-            charts.grafico_crm_por_grupo_ab(
-                crm_grupo_ab_airys, titulo="Funil Pós-Contato por Grupo AB (WhatsApp Airys)",
-            ),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_airys),
                 ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
             ),
-            charts.grafico_crm_por_grupo_ab(crm_grupo_ab_rcs, titulo="Funil Pós-Contato por Grupo AB (RCS)"),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_rcs),
                 ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
             ),
             formatar_percentual(taxa_entrega_crm),
-            formatar_percentual(home_vs_entrega_crm),
-            formatar_percentual(entregue_por_home_crm),
+            formatar_percentual(home_vs_etapa_valor),
+            home_vs_etapa_titulo,
         )

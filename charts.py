@@ -240,7 +240,10 @@ def grafico_taxa_entrega_campanha(agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Taxa de Entrega por Campanha")
 
 
-def grafico_volume_grupo_ab(df: pd.DataFrame) -> go.Figure:
+def grafico_volume_grupo_ab(df: pd.DataFrame, crm_agregado: pd.DataFrame | None = None) -> go.Figure:
+    """`crm_agregado` (opcional, formato de `agregar_crm_por_grupo_ab`) acrescenta o
+    funil de negociação (Home/Autenticação/Oferta/Acordo) como barras extras dentro do
+    mesmo gráfico, lado a lado com Disparado/Enviado/Entregue/Falhou."""
     if df.empty:
         return _layout_base(go.Figure(), "Volume por Grupo AB (sem dados no período)")
 
@@ -253,6 +256,16 @@ def grafico_volume_grupo_ab(df: pd.DataFrame) -> go.Figure:
         ("entregue", "Entregue", "entregue"), ("falhou", "Falhou", "falhou"),
     ]:
         fig.add_trace(go.Bar(x=agrupado.index, y=agrupado[coluna], name=rotulo, marker_color=CORES[chave_cor]))
+
+    if crm_agregado is not None and not crm_agregado.empty:
+        cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+        crm_alinhado = crm_agregado.set_index("grupo_ab").reindex(ordem).fillna(0)
+        for etapa in ETAPAS_CRM:
+            fig.add_trace(go.Bar(
+                x=agrupado.index, y=crm_alinhado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+                marker_color=cores_etapa[etapa], marker_pattern_shape="/",
+            ))
+
     fig.update_layout(barmode="group")
     return _layout_base(fig, "Volume por Grupo AB (Segmentação de Propensão)")
 
@@ -493,7 +506,11 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
     return registros
 
 
-def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
+def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame, crm_agregado: pd.DataFrame | None = None) -> go.Figure:
+    """`crm_agregado` (opcional, formato de `agregar_crm_por_grupo_ab`) acrescenta o
+    funil de negociação (Home/Autenticação/Oferta/Acordo) como barras extras ao lado da
+    pilha de status — todo mundo no mesmo `offsetgroup` continua empilhado normalmente,
+    e cada etapa nova ganha seu próprio grupo, aparecendo ao lado."""
     if agregado.empty:
         return _layout_base(go.Figure(), "Resultado de WhatsApp por Grupo AB (sem dados no período)")
 
@@ -502,9 +519,19 @@ def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
     for status in SITUACOES_WHATSAPP:
         fig.add_trace(go.Bar(
             x=rotulos, y=agregado[status], name=_NOMES_SITUACAO_WHATSAPP[status],
-            marker_color=_CORES_SITUACAO_WHATSAPP[status],
+            marker_color=_CORES_SITUACAO_WHATSAPP[status], offsetgroup="status",
         ))
-    fig.update_layout(barmode="stack")
+
+    if crm_agregado is not None and not crm_agregado.empty:
+        cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
+        crm_alinhado = crm_agregado.set_index("grupo_ab").reindex(agregado["grupo_ab"]).fillna(0)
+        for etapa in ETAPAS_CRM:
+            fig.add_trace(go.Bar(
+                x=rotulos, y=crm_alinhado[etapa], name=ETAPAS_CRM_LABEL[etapa],
+                marker_color=cores_etapa[etapa], marker_pattern_shape="/", offsetgroup=etapa,
+            ))
+
+    fig.update_layout(barmode="group")
     return _layout_base(fig, "Resultado de WhatsApp por Grupo AB")
 
 

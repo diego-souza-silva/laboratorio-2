@@ -25,11 +25,14 @@ STATUS_LABEL = {
 }
 
 
-def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str) -> dbc.Card:
+def _cartao_kpi(id_valor: str, titulo: str, icone: str, cor: str, id_titulo: str | None = None) -> dbc.Card:
+    """`id_titulo`, quando informado, permite que um callback troque o rótulo do
+    cartão (ex.: "Home vs Entrega" -> "Home vs Lido" dependendo do canal ativo)."""
     return dbc.Card(
         dbc.CardBody([
             html.Div([
                 html.I(className=f"bi {icone}", style={"color": cor, "fontSize": "1.6rem"}),
+                html.Span(titulo, className="kpi-titulo", id=id_titulo) if id_titulo else
                 html.Span(titulo, className="kpi-titulo"),
             ], className="kpi-cabecalho"),
             html.H3(id=id_valor, className="kpi-valor", style={"color": cor}),
@@ -451,9 +454,6 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Row([
-            dbc.Col(_grafico_card("Funil Pós-Contato por Grupo AB (SMS)", "grafico-crm-grupo-ab-sms"), md=12),
-        ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
                 html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (SMS)", className="mb-3"),
@@ -473,12 +473,6 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Row([
-            dbc.Col(
-                _grafico_card("Funil Pós-Contato por Grupo AB (WhatsApp Ótima)", "grafico-crm-grupo-ab-whatsapp"),
-                md=12,
-            ),
-        ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
                 html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Ótima)", className="mb-3"),
@@ -498,12 +492,6 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Row([
-            dbc.Col(
-                _grafico_card("Funil Pós-Contato por Grupo AB (WhatsApp Airys)", "grafico-crm-grupo-ab-airys"),
-                md=12,
-            ),
-        ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
                 html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Airys)", className="mb-3"),
@@ -524,9 +512,6 @@ def _aba_grupo_ab() -> html.Div:
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
-        dbc.Row([
-            dbc.Col(_grafico_card("Funil Pós-Contato por Grupo AB (RCS)", "grafico-crm-grupo-ab-rcs"), md=12),
-        ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
                 html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (RCS)", className="mb-3"),
@@ -663,11 +648,10 @@ def _aba_conversao_crm() -> html.Div:
                 xs=12, sm=6, md=4, lg=True,
             ),
             dbc.Col(
-                _cartao_kpi("kpi-crm-home-vs-entrega", "Home vs Entrega", "bi-signpost-split-fill", "#3DA9FC"),
-                xs=12, sm=6, md=4, lg=True,
-            ),
-            dbc.Col(
-                _cartao_kpi("kpi-crm-entregue-por-home", "Entregue por Home", "bi-arrow-repeat", "#F5A623"),
+                _cartao_kpi(
+                    "kpi-crm-home-vs-etapa", "Home vs Entrega", "bi-signpost-split-fill", "#3DA9FC",
+                    id_titulo="kpi-crm-home-vs-etapa-titulo",
+                ),
                 xs=12, sm=6, md=4, lg=True,
             ),
         ], className="g-3 mb-3"),
