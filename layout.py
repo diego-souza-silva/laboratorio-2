@@ -603,6 +603,21 @@ def _aba_conversao_crm() -> html.Div:
     return html.Div([
         dbc.Alert(
             [
+                html.I(className="bi bi-question-circle-fill me-2"),
+                html.B("O que é \"Não Classificado\"? "),
+                "É o cliente cujo telefone não foi encontrado na base de segmentação "
+                "(ARQUIVO DA BASE INTEIRA) usada para calcular o grupo_ab (P1 Máxima a "
+                "P4 Baixa). Isso não quer dizer que o disparo não aconteceu — no SMS e no "
+                "RCS, por exemplo, praticamente todo \"Não Classificado\" é um cliente que "
+                "de fato recebeu o disparo, só não tem propensão cadastrada/cruzada. Já no "
+                "WhatsApp Airys esse grupo tende a ser maior porque o telefone do retorno "
+                "é reconstruído a partir de outro campo do arquivo (não vem direto), e "
+                "às vezes não bate exatamente com o telefone do disparo original.",
+            ],
+            color="warning", className="mb-3",
+        ),
+        dbc.Alert(
+            [
                 html.I(className="bi bi-info-circle-fill me-2"),
                 "Seção auxiliar baseada no log de CRM (negociação), não no log de envio. "
                 "Restrita às campanhas cadastradas em ARQUIVOS PARA DISPAROS/. Escolha o "
