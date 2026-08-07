@@ -444,8 +444,10 @@ def _aba_grupo_ab() -> html.Div:
         ),
         html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Volume por Grupo AB", "grafico-volume-grupo-ab"), md=6),
-            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB", "grafico-taxa-entrega-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Volume por Grupo AB", "grafico-volume-grupo-ab", altura="1500px"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB", "grafico-taxa-entrega-grupo-ab"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
@@ -502,8 +504,10 @@ def _aba_grupo_ab() -> html.Div:
 
         html.Span("RCS (Ótima)", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Volume por Grupo AB (RCS)", "grafico-volume-grupo-ab-rcs"), md=6),
-            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB (RCS)", "grafico-taxa-entrega-grupo-ab-rcs"), md=6),
+            dbc.Col(_grafico_card("Volume por Grupo AB (RCS)", "grafico-volume-grupo-ab-rcs", altura="1500px"), md=12),
+        ], className="g-3 mb-3"),
+        dbc.Row([
+            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB (RCS)", "grafico-taxa-entrega-grupo-ab-rcs"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([

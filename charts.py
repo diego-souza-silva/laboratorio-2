@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from data_processing import (
     ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
 )
-from utils import formatar_numero, formatar_percentual
+from utils import formatar_numero, formatar_percentual, taxa
 
 CORES = {
     "disparado": "#8B93B8",
@@ -240,10 +240,20 @@ def grafico_taxa_entrega_campanha(agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Taxa de Entrega por Campanha")
 
 
+def _texto_valor_percentual(valores: pd.Series, base: pd.Series) -> list[str]:
+    return [
+        f"{formatar_numero(v)} ({formatar_percentual(taxa(v, b))})"
+        for v, b in zip(valores, base)
+    ]
+
+
 def grafico_volume_grupo_ab(df: pd.DataFrame, crm_agregado: pd.DataFrame | None = None) -> go.Figure:
-    """`crm_agregado` (opcional, formato de `agregar_crm_por_grupo_ab`) acrescenta o
-    funil de negociação (Home/Autenticação/Oferta/Acordo) como barras extras dentro do
-    mesmo gráfico, lado a lado com Disparado/Enviado/Entregue/Falhou."""
+    """Horizontal, um grupo de barras por grupo_ab. `crm_agregado` (opcional, formato
+    de `agregar_crm_por_grupo_ab`) acrescenta o funil de negociação (Home/Autenticação/
+    Oferta/Acordo) como barras extras dentro do mesmo gráfico, lado a lado com
+    Disparado/Enviado/Entregue/Falhou. Cada barra mostra o volume e o percentual em
+    relação à etapa anterior (Enviado/Disparado, Entregue/Enviado, Falhou/Enviado,
+    Home/Entregue, Autenticação/Home, Oferta/Autenticação, Acordo/Oferta)."""
     if df.empty:
         return _layout_base(go.Figure(), "Volume por Grupo AB (sem dados no período)")
 
@@ -251,23 +261,39 @@ def grafico_volume_grupo_ab(df: pd.DataFrame, crm_agregado: pd.DataFrame | None 
     agrupado = df.groupby("grupo_ab")[["disparado", "enviado", "entregue", "falhou"]].sum().reindex(ordem)
 
     fig = go.Figure()
-    for coluna, rotulo, chave_cor in [
-        ("disparado", "Disparado", "disparado"), ("enviado", "Enviado", "enviado"),
-        ("entregue", "Entregue", "entregue"), ("falhou", "Falhou", "falhou"),
+    n_series = 4
+    for coluna, rotulo, chave_cor, base in [
+        ("disparado", "Disparado", "disparado", None),
+        ("enviado", "Enviado", "enviado", agrupado["disparado"]),
+        ("entregue", "Entregue", "entregue", agrupado["enviado"]),
+        ("falhou", "Falhou", "falhou", agrupado["enviado"]),
     ]:
-        fig.add_trace(go.Bar(x=agrupado.index, y=agrupado[coluna], name=rotulo, marker_color=CORES[chave_cor]))
+        valores = agrupado[coluna]
+        textos = [formatar_numero(v) for v in valores] if base is None else _texto_valor_percentual(valores, base)
+        fig.add_trace(go.Bar(
+            y=agrupado.index, x=valores, name=rotulo, marker_color=CORES[chave_cor],
+            orientation="h", text=textos, textposition="outside",
+        ))
 
     if crm_agregado is not None and not crm_agregado.empty:
+        n_series = 8
         cores_etapa = {"home": "#8B93B8", "auth": "#3DA9FC", "oferta": "#F5A623", "acordo": "#2ECC71"}
         crm_alinhado = crm_agregado.set_index("grupo_ab").reindex(ordem).fillna(0)
+        bases_etapa = {
+            "home": agrupado["entregue"], "auth": crm_alinhado["home"],
+            "oferta": crm_alinhado["auth"], "acordo": crm_alinhado["oferta"],
+        }
         for etapa in ETAPAS_CRM:
+            valores = crm_alinhado[etapa]
             fig.add_trace(go.Bar(
-                x=agrupado.index, y=crm_alinhado[etapa], name=ETAPAS_CRM_LABEL[etapa],
-                marker_color=cores_etapa[etapa], marker_pattern_shape="/",
+                y=agrupado.index, x=valores, name=ETAPAS_CRM_LABEL[etapa],
+                marker_color=cores_etapa[etapa], marker_pattern_shape="/", orientation="h",
+                text=_texto_valor_percentual(valores, bases_etapa[etapa]), textposition="outside",
             ))
 
     fig.update_layout(barmode="group")
-    return _layout_base(fig, "Volume por Grupo AB (Segmentação de Propensão)")
+    altura = max(380, 34 * n_series * len(agrupado) + 100)
+    return _layout_base(fig, "Volume por Grupo AB (Segmentação de Propensão)", altura=altura)
 
 
 def grafico_taxa_entrega_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
