@@ -619,6 +619,28 @@ def _extrair_telefone_wamid(wamid) -> str:
     return encontrado.group(0) if encontrado else ""
 
 
+def _reconstruir_telefone_airys(bruto: str, telefones_conhecidos: dict) -> str:
+    """Normaliza o telefone decodificado do wamid pro mesmo formato usado no resto do
+    app (DDD + 9 dígitos, sem DDI). O wamid às vezes embute o número no formato antigo,
+    de 12 dígitos (DDI 55 + DDD + 8 dígitos, sem o "9" que a Anatel passou a exigir nos
+    celulares) — ex.: "553186492355" em vez de "5531986492355"/"31986492355". Sem tratar
+    esse caso, `_normalizar_telefone_com_ddi` (que só tira o DDI quando o total dá 13
+    dígitos) deixava esses números com DDI e sem o 9º dígito, o que nunca batia com a
+    base de segmentação nem com o arquivo de disparo — inflando artificialmente o
+    "Não Classificado" do Airys (validado: sobe de 47% para 80% de casamento com a
+    base). Testa as duas leituras possíveis (com e sem o "9" reinserido) contra os
+    telefones conhecidos da base e fica com a que bate; na ausência de um match,
+    assume o formato moderno (com o "9"), que é o padrão atual da telefonia móvel."""
+    sem_ddi = bruto[2:] if bruto.startswith("55") and len(bruto) in (12, 13) else bruto
+    if len(sem_ddi) != 10:
+        return sem_ddi
+    candidatos = [sem_ddi[:2] + "9" + sem_ddi[2:], sem_ddi]
+    for candidato in candidatos:
+        if candidato in telefones_conhecidos:
+            return candidato
+    return candidatos[0]
+
+
 def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o retorno do Airys (AirysChat + Meta Graph API) em `ARQUIVOS DE RETORNO
     WHATSAPP AIRYS/` — granularidade por destinatário/mensagem, com status detalhado
@@ -641,8 +663,10 @@ def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     if "provider_message_id" in df.columns:
         df = df.drop_duplicates("provider_message_id")
 
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["telefone_norm"] = (
-        df["provider_message_id"].apply(_extrair_telefone_wamid).apply(_normalizar_telefone_com_ddi)
+        df["provider_message_id"].apply(_extrair_telefone_wamid)
+        .apply(lambda t: _reconstruir_telefone_airys(t, mapa_grupo_ab) if t else "")
     )
     df = df[df["telefone_norm"] != ""]
 
@@ -668,7 +692,6 @@ def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
     mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
