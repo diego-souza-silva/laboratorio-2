@@ -813,17 +813,38 @@ def formatar_reais(valor: float | None, casas: int = 2) -> str:
     return f"R$ {texto}"
 
 
+def formatar_reais_com_percentual(valor: float | None, total: float) -> str:
+    """Formata "R$ valor (percentual)" — percentual de `valor` sobre `total` (ex.: custo
+    de um canal sobre o custo total do período)."""
+    if valor is None:
+        return "Não informado"
+    return f"{formatar_reais(valor)} ({formatar_percentual(taxa(valor, total))})"
+
+
 def formatar_tabela_custos(linhas: list[dict]) -> list[dict]:
+    total_quantidade_por_canal: dict[str, int] = {}
+    for linha in linhas:
+        total_quantidade_por_canal[linha["canal"]] = (
+            total_quantidade_por_canal.get(linha["canal"], 0) + linha["quantidade"]
+        )
+    total_custo_geral = sum(l["custo_total"] for l in linhas if l["custo_total"] is not None)
+
     registros = []
     for linha in linhas:
+        pct_quantidade = taxa(linha["quantidade"], total_quantidade_por_canal[linha["canal"]])
+        custo_total = linha["custo_total"]
+        custo_formatado = (
+            f"{formatar_reais(custo_total)} ({formatar_percentual(taxa(custo_total, total_custo_geral))})"
+            if custo_total is not None else "Não informado"
+        )
         registros.append({
             "Data": linha["data"].strftime("%d/%m/%Y") if linha["data"] else "Período completo (sem data por envio)",
             "Canal": CANAL_CUSTO_LABEL.get(linha["canal"], linha["canal"]),
             "Fornecedor": FORNECEDOR_CUSTO_LABEL.get(linha["fornecedor"], linha["fornecedor"]),
             "Base de Cobrança": BASE_COBRANCA_LABEL.get(linha["base_cobranca"], linha["base_cobranca"]),
-            "Quantidade": formatar_numero(linha["quantidade"]),
+            "Quantidade": f"{formatar_numero(linha['quantidade'])} ({formatar_percentual(pct_quantidade)})",
             "Custo Unitário": formatar_reais(linha["custo_unitario"], casas=4),
-            "Custo Total": formatar_reais(linha["custo_total"]),
+            "Custo Total": custo_formatado,
         })
     return registros
 

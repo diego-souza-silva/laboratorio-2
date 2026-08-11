@@ -21,6 +21,7 @@ Cada telefone do arquivo de retorno sempre existe na base de disparo corresponde
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import re
 from pathlib import Path
 
@@ -1689,6 +1690,7 @@ def _montar_linha_custo(data, canal: str, fornecedor: str, quantidades) -> dict 
         "data": data, "canal": canal, "fornecedor": fornecedor, "base_cobranca": base,
         "quantidade": quantidade, "custo_unitario": custo_unitario,
         "custo_total": (quantidade * custo_unitario) if custo_unitario is not None else None,
+        "disparado": int(quantidades["disparado"]),
     }
 
 
@@ -1712,6 +1714,7 @@ def calcular_custos_disparo(
         linhas.append({
             "data": None, "canal": "email", "fornecedor": "salesforce", "base_cobranca": "enviado",
             "quantidade": int(envios_email), "custo_unitario": None, "custo_total": None,
+            "disparado": int(envios_email),
         })
     linhas.sort(key=lambda l: (l["data"] is None, l["data"], l["canal"], l["fornecedor"]))
     return linhas
@@ -1810,3 +1813,51 @@ def salvar_jornada_cobranca(registros: list[dict]) -> None:
     JORNADA_COBRANCA.csv."""
     df = pd.DataFrame(registros, columns=COLUNAS_JORNADA_COBRANCA).fillna("")
     df.to_csv(ARQUIVO_JORNADA_COBRANCA, index=False, encoding="utf-8-sig")
+
+
+_CANAL_LABEL_PARA_CHAVE = {v.lower(): k for k, v in CANAL_CUSTO_LABEL.items()}
+_FORNECEDOR_LABEL_PARA_CHAVE = {v.lower(): k for k, v in FORNECEDOR_CUSTO_LABEL.items()}
+
+
+def calcular_volumetria_jornada(registros_jornada: list[dict], linhas_custo: list[dict]) -> list[dict]:
+    """Cruza cada linha da Jornada de Cobrança (campos "Data"/"Canal"/"Fornecedor",
+    texto livre digitado pelo usuário) com as linhas de custo já calculadas pros
+    filtros ativos do dashboard (`calcular_custos_disparo`), devolvendo o total
+    disparado, a quantidade cobrada (conforme a base de cobrança do fornecedor) e o
+    custo daquele teste — assim dá pra ver o custo de cada rodada de disparo sem
+    duplicar a lógica de cobrança. "Fornecedor" aceita mais de um nome (ex.: "Ótima e
+    Airys" no teste que dividiu a base), somando as linhas de custo de cada um. Quando
+    a data/canal/fornecedor não bate com nenhuma linha de custo — fora do período
+    filtrado, ou canal sem granularidade por dia (Email, ver `calcular_custos_disparo`)
+    — os campos voltam vazios em vez de estimar um valor."""
+    resultado = []
+    for registro in registros_jornada:
+        data_str = (registro.get("Data") or "").strip()
+        try:
+            data = dt.datetime.strptime(data_str, "%d/%m/%Y").date() if data_str else None
+        except ValueError:
+            data = None
+        canal_chave = _CANAL_LABEL_PARA_CHAVE.get((registro.get("Canal") or "").strip().lower())
+        fornecedores_chave = [
+            _FORNECEDOR_LABEL_PARA_CHAVE[parte]
+            for parte in (p.strip().lower() for p in re.split(r"\s+e\s+|,", registro.get("Fornecedor") or ""))
+            if parte in _FORNECEDOR_LABEL_PARA_CHAVE
+        ]
+        candidatas = [
+            l for l in linhas_custo
+            if data and l["data"] == data and l["canal"] == canal_chave and l["fornecedor"] in fornecedores_chave
+        ] if (canal_chave and fornecedores_chave) else []
+        if not candidatas:
+            resultado.append({
+                "total_disparado": None, "base_cobranca": None,
+                "quantidade_cobrada": None, "custo": None,
+            })
+            continue
+        custos = [l["custo_total"] for l in candidatas]
+        resultado.append({
+            "total_disparado": sum(l["disparado"] for l in candidatas),
+            "base_cobranca": candidatas[0]["base_cobranca"],
+            "quantidade_cobrada": sum(l["quantidade"] for l in candidatas),
+            "custo": sum(custos) if all(c is not None for c in custos) else None,
+        })
+    return resultado

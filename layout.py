@@ -1089,6 +1089,26 @@ def _aba_jornada_cobranca() -> html.Div:
                     html.Span(id="status-salvar-jornada", className="legenda-registros ms-3"),
                 ], className="d-flex align-items-center"),
             ]),
+            className="cartao-grafico shadow-sm mb-3",
+        ),
+        dbc.Alert(
+            [
+                html.I(className="bi bi-calculator-fill me-2"),
+                "Volumetria e custo calculados automaticamente a partir dos dados reais "
+                "(casando Data + Canal + Fornecedor de cada teste) — respeita os filtros "
+                "globais no topo da página. \"Total Disparado\" é tudo que saiu pra aquele "
+                "teste; \"Quantidade Cobrada\" é a etapa que o fornecedor de fato tarifa "
+                "(ver aba Custos). Quando o teste cai fora do período filtrado, ou é "
+                "Email (sem granularidade por dia), os campos ficam em \"—\" em vez de "
+                "estimar um valor.",
+            ],
+            color="info", className="mb-3",
+        ),
+        dbc.Card(
+            dbc.CardBody([
+                html.H6("Volumetria e Custo por Teste", className="mb-3"),
+                html.Div(id="tabela-jornada-custo-container"),
+            ]),
             className="cartao-grafico shadow-sm",
         ),
     ])
