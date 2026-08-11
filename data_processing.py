@@ -38,6 +38,7 @@ DIR_RETORNO_EMAIL_SALESFORCE = RAIZ_PROJETO / "ARQUIVOS DE RETORNO EMAIL SALESFO
 DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
+ARQUIVO_JORNADA_COBRANCA = RAIZ_PROJETO / "JORNADA_COBRANCA.csv"
 
 LIMIAR_VINCULO_RETORNO = 0.8
 
@@ -1618,75 +1619,90 @@ def salvar_diario_estrategia(conteudo: str) -> None:
 # ---------------------------------------------------------------------------
 # Custos de disparo
 # ---------------------------------------------------------------------------
-# Custo unitário por (canal, fornecedor) — só os que têm valor confirmado pelo
-# negócio. Ausente do dict = custo não informado (ex.: WhatsApp Ótima/Airys,
-# Email/Salesforce, que roda sobre um saldo pré-pago em vez de custo por envio) —
-# nesse caso NÃO se estima nem se inventa um valor, fica marcado como tal na tela.
-CUSTO_UNITARIO_POR_CANAL_FORNECEDOR = {
-    ("sms", "kolmeya"): 0.0620,
-    ("sms", "otima"): 0.0500,
-    ("rcs", "otima"): 0.0900,
+# Regra de cobrança por (canal, fornecedor) — só os que têm valor confirmado pelo
+# negócio. Ausente do dict = custo não informado (ex.: WhatsApp Airys, Email/
+# Salesforce, que roda sobre um saldo pré-pago em vez de custo por envio) — nesse
+# caso NÃO se estima nem se inventa um valor, fica marcado como tal na tela.
+# `base` escolhe qual quantidade é tarifada — cada fornecedor cobra por uma etapa
+# diferente do funil, não sempre "enviado":
+#   - "enviado": Kolmeya (SMS) e Ótima (SMS, hoje sem volume real).
+#   - "disparado": Ótima (RCS) — cobra pela tentativa de disparo, não pelo envio
+#     confirmado.
+#   - "entregue": Ótima (WhatsApp) — só cobra o que foi de fato entregue.
+CUSTO_CONFIG_POR_CANAL_FORNECEDOR = {
+    ("sms", "kolmeya"): {"custo_unitario": 0.0620, "base": "enviado"},
+    ("sms", "otima"): {"custo_unitario": 0.0500, "base": "enviado"},
+    ("rcs", "otima"): {"custo_unitario": 0.0900, "base": "disparado"},
+    ("whatsapp", "otima"): {"custo_unitario": 0.0685, "base": "entregue"},
 }
 
 CANAL_CUSTO_LABEL = {"sms": "SMS", "rcs": "RCS", "whatsapp": "WhatsApp", "email": "Email"}
 FORNECEDOR_CUSTO_LABEL = {
     "kolmeya": "Kolmeya", "otima": "Ótima", "airys": "Airys", "salesforce": "Salesforce",
 }
+BASE_COBRANCA_LABEL = {"disparado": "Disparado", "enviado": "Enviado", "entregue": "Entregue"}
 
 
 def _linhas_custo_por_dia_evento(df: pd.DataFrame, canal: str) -> list[dict]:
-    """Quantidade enviada por dia e fornecedor, a partir de um df já filtrado e restrito
-    a um canal cujo "enviado" é a flag 0/1 (SMS/RCS, formato estilo SMS)."""
+    """Quantidade por dia e fornecedor, a partir de um df já filtrado e restrito a um
+    canal com as flags 0/1 `disparado`/`enviado`/`entregue` (SMS/RCS, formato estilo
+    SMS) — soma as três, e cada linha escolhe qual delas usar conforme a regra de
+    cobrança do fornecedor (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`)."""
     if df.empty:
         return []
     d = df.copy()
     d["fornecedor"] = d["utm_campaign"].apply(fornecedor_da_campanha)
-    agrupado = d.groupby(["data", "fornecedor"])["enviado"].sum()
-    return _montar_linhas_custo(agrupado, canal)
+    agrupado = d.groupby(["data", "fornecedor"])[["disparado", "enviado", "entregue"]].sum()
+    linhas = []
+    for (data, fornecedor), linha in agrupado.iterrows():
+        linhas.append(_montar_linha_custo(data, canal, fornecedor, linha))
+    return [l for l in linhas if l]
 
 
 def _linhas_custo_por_dia_status(df: pd.DataFrame, canal: str, fornecedor: str) -> list[dict]:
     """Igual `_linhas_custo_por_dia_evento`, mas pro formato de retorno com granularidade
-    por destinatário (WhatsApp/Airys) — aqui "enviado" é qualquer status diferente de
-    "Não Enviado" (mesma regra usada em `calcular_funil_whatsapp`). Esses dataframes não
-    têm coluna `utm_campaign` (só a WhatsApp/Airys, com "campanha"/"campaign_titulo" no
-    formato bruto do retorno), então o fornecedor vem fixo por chamada — cada df já é
-    de um fornecedor só (whatsapp_completo é só Ótima, airys_completo é só Airys)."""
+    por destinatário (WhatsApp/Airys) — "enviado" é qualquer status diferente de "Não
+    Enviado", "entregue" é Entregue+Lido (mesma regra usada em `calcular_funil_whatsapp`
+    e no cálculo de "Home vs Lido"). Esses dataframes não têm coluna `utm_campaign` (só
+    "campanha"/"campaign_titulo" no formato bruto do retorno), então o fornecedor vem
+    fixo por chamada — cada df já é de um fornecedor só (whatsapp_completo é só Ótima,
+    airys_completo é só Airys)."""
     if df.empty:
         return []
     d = df.copy()
-    d["fornecedor"] = fornecedor
-    d["_enviado"] = (d["situacao_norm"] != "Nao Enviado").astype(int)
-    agrupado = d.groupby(["data", "fornecedor"])["_enviado"].sum()
-    return _montar_linhas_custo(agrupado, canal)
+    d["enviado"] = (d["situacao_norm"] != "Nao Enviado").astype(int)
+    d["entregue"] = d["situacao_norm"].isin(["Entregue", "Lido"]).astype(int)
+    d["disparado"] = 1
+    agrupado = d.groupby("data")[["disparado", "enviado", "entregue"]].sum()
+    linhas = [_montar_linha_custo(data, canal, fornecedor, linha) for data, linha in agrupado.iterrows()]
+    return [l for l in linhas if l]
 
 
-def _montar_linhas_custo(agrupado: pd.Series, canal: str) -> list[dict]:
-    linhas = []
-    for (data, fornecedor), quantidade in agrupado.items():
-        quantidade = int(quantidade)
-        if quantidade <= 0:
-            continue
-        custo_unitario = CUSTO_UNITARIO_POR_CANAL_FORNECEDOR.get((canal, fornecedor))
-        linhas.append({
-            "data": data, "canal": canal, "fornecedor": fornecedor, "quantidade_enviada": quantidade,
-            "custo_unitario": custo_unitario,
-            "custo_total": (quantidade * custo_unitario) if custo_unitario is not None else None,
-        })
-    return linhas
+def _montar_linha_custo(data, canal: str, fornecedor: str, quantidades) -> dict | None:
+    config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal, fornecedor))
+    base = config["base"] if config else "enviado"
+    quantidade = int(quantidades[base])
+    if quantidade <= 0:
+        return None
+    custo_unitario = config["custo_unitario"] if config else None
+    return {
+        "data": data, "canal": canal, "fornecedor": fornecedor, "base_cobranca": base,
+        "quantidade": quantidade, "custo_unitario": custo_unitario,
+        "custo_total": (quantidade * custo_unitario) if custo_unitario is not None else None,
+    }
 
 
 def calcular_custos_disparo(
     df_sms: pd.DataFrame, df_rcs: pd.DataFrame, df_whatsapp_otima: pd.DataFrame,
     df_whatsapp_airys: pd.DataFrame, envios_email: int,
 ) -> list[dict]:
-    """Monta a tabela de custo por dia/canal/fornecedor — CUSTO = quantidade ENVIADA ×
-    custo unitário do fornecedor (nunca entregue/lido/respondido/clique/acordo). Cada
-    df já deve vir filtrado pelos filtros globais do dashboard (mesma regra de
-    "quantidade enviada" já usada no resto do app: flag `enviado` pro SMS/RCS estilo
-    SMS, status != "Não Enviado" pro WhatsApp/RCS estilo Otima). O e-mail (Salesforce)
-    entra como uma única linha sem data, já que o relatório não tem granularidade por
-    dia/destinatário — ver `carregar_dados_email_salesforce`."""
+    """Monta a tabela de custo por dia/canal/fornecedor — CUSTO = quantidade tarifada ×
+    custo unitário do fornecedor. A quantidade tarifada depende da regra de cobrança de
+    cada fornecedor (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`: Kolmeya cobra por enviado,
+    Ótima RCS por disparado, Ótima WhatsApp por entregue) — nunca lido, respondido,
+    clique ou acordo. Cada df já deve vir filtrado pelos filtros globais do dashboard.
+    O e-mail (Salesforce) entra como uma única linha sem data, já que o relatório não
+    tem granularidade por dia/destinatário — ver `carregar_dados_email_salesforce`."""
     linhas = []
     linhas += _linhas_custo_por_dia_evento(df_sms, "sms")
     linhas += _linhas_custo_por_dia_evento(df_rcs, "rcs")
@@ -1694,8 +1710,103 @@ def calcular_custos_disparo(
     linhas += _linhas_custo_por_dia_status(df_whatsapp_airys, "whatsapp", "airys")
     if envios_email:
         linhas.append({
-            "data": None, "canal": "email", "fornecedor": "salesforce",
-            "quantidade_enviada": int(envios_email), "custo_unitario": None, "custo_total": None,
+            "data": None, "canal": "email", "fornecedor": "salesforce", "base_cobranca": "enviado",
+            "quantidade": int(envios_email), "custo_unitario": None, "custo_total": None,
         })
     linhas.sort(key=lambda l: (l["data"] is None, l["data"], l["canal"], l["fornecedor"]))
     return linhas
+
+
+def calcular_custo_total_por_canal(linhas_custo: list[dict]) -> dict:
+    """Soma o custo total (só linhas com custo unitário definido) por canal."""
+    totais = {}
+    for linha in linhas_custo:
+        if linha["custo_total"] is None:
+            continue
+        totais[linha["canal"]] = totais.get(linha["canal"], 0.0) + linha["custo_total"]
+    return totais
+
+
+# ---------------------------------------------------------------------------
+# Jornada de Cobrança
+# ---------------------------------------------------------------------------
+# Registro editável (pela própria aba do dashboard) de cada rodada de disparo —
+# igual um histórico de testes, não um cálculo derivado dos dados. Persistido em
+# CSV pra sobreviver a reinícios, no mesmo espírito do Diário de Estratégia.
+COLUNAS_JORNADA_COBRANCA = ["Data", "Teste", "Canal", "Fornecedor", "Descrição", "Volume"]
+
+_JORNADA_COBRANCA_PADRAO = [
+    {
+        "Data": "25/07/2026", "Teste": "Teste 1", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "Descrição": "Planejado em 24/07. Disparo proporcional por grupo de propensão "
+                      "(P1 a P4), 2.000 clientes em cada.",
+        "Volume": "8.000 (2.000 por P)",
+    },
+    {
+        "Data": "27/07/2026", "Teste": "Teste 2", "Canal": "Email", "Fornecedor": "Salesforce",
+        "Descrição": "Grupo Topo de Funil inteiro, disparo proporcional em 2 levas: 1ª "
+                      "leva com 9 clientes em cada P (P1 a P4); 2ª leva com 1.000 "
+                      "clientes em cada um de P2, P3 e P4.",
+        "Volume": "3.036 (36 + 3.000)",
+    },
+    {
+        "Data": "28/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Ótima e Airys",
+        "Descrição": "Mesma base dos testes de 25/07 e 27/07, metade disparada via "
+                      "Ótima e a outra metade via Airys.",
+        "Volume": "",
+    },
+    {
+        "Data": "31/07/2026", "Teste": "Teste 4", "Canal": "Email", "Fornecedor": "Salesforce",
+        "Descrição": "Todos os grupos estratégicos, só origens de e-mail validadas "
+                      "(cadastro, engajado, log, válido). Disparo previsto pra 30/07, "
+                      "adiado pra 31/07 porque os links trackeados não funcionavam.",
+        "Volume": "",
+    },
+    {
+        "Data": "03/08/2026", "Teste": "Teste 5", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4) novamente, "
+                      "2.000 clientes em cada.",
+        "Volume": "8.000 (2.000 por P)",
+    },
+    {
+        "Data": "04/08/2026", "Teste": "Teste 6", "Canal": "RCS", "Fornecedor": "Ótima",
+        "Descrição": "Somente Topo de Funil.",
+        "Volume": "8.374",
+    },
+    {
+        "Data": "06/08/2026", "Teste": "Teste 7", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4), 6.000 "
+                      "clientes em cada.",
+        "Volume": "24.000 (6.000 por P)",
+    },
+    {
+        "Data": "08/08/2026", "Teste": "Teste 8", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "Descrição": "Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
+        "Volume": "",
+    },
+    {
+        "Data": "10/08/2026", "Teste": "Teste 9", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "Descrição": "Somente Topo de Funil.",
+        "Volume": "",
+    },
+]
+
+
+def carregar_jornada_cobranca() -> list[dict]:
+    """Lê a jornada de cobrança de JORNADA_COBRANCA.csv. Se o arquivo ainda não
+    existir, cria com o histórico inicial (`_JORNADA_COBRANCA_PADRAO`)."""
+    if not ARQUIVO_JORNADA_COBRANCA.exists():
+        salvar_jornada_cobranca(_JORNADA_COBRANCA_PADRAO)
+        return list(_JORNADA_COBRANCA_PADRAO)
+    df = pd.read_csv(ARQUIVO_JORNADA_COBRANCA, dtype=str).fillna("")
+    for coluna in COLUNAS_JORNADA_COBRANCA:
+        if coluna not in df.columns:
+            df[coluna] = ""
+    return df[COLUNAS_JORNADA_COBRANCA].to_dict("records")
+
+
+def salvar_jornada_cobranca(registros: list[dict]) -> None:
+    """Grava a jornada de cobrança (editada direto na tabela da aba) de volta em
+    JORNADA_COBRANCA.csv."""
+    df = pd.DataFrame(registros, columns=COLUNAS_JORNADA_COBRANCA).fillna("")
+    df.to_csv(ARQUIVO_JORNADA_COBRANCA, index=False, encoding="utf-8-sig")

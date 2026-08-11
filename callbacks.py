@@ -8,11 +8,12 @@ from dash import Input, Output, State, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    CAMPANHAS_ESCOPO, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
+    CAMPANHAS_ESCOPO, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_custos_disparo, calcular_funil,
+    agregar_whatsapp_por_grupo_estrategico, calcular_custo_total_por_canal, calcular_custos_disparo,
+    calcular_funil,
     calcular_funil_combinado_email_salesforce,
     calcular_funil_combinado_sms, calcular_funil_combinado_whatsapp, calcular_funil_whatsapp,
     calcular_kpis, calcular_kpis_email_salesforce, calcular_kpis_resposta_airys,
@@ -21,7 +22,7 @@ from data_processing import (
     carregar_dados_sms, carregar_dados_whatsapp_mensagem, filtrar_dados, filtrar_dados_whatsapp,
     fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
     montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
-    salvar_diario_estrategia, total_disparado_campanhas,
+    salvar_diario_estrategia, salvar_jornada_cobranca, total_disparado_campanhas,
 )
 from utils import formatar_numero, formatar_percentual, taxa
 
@@ -81,7 +82,7 @@ COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
 ]
 
 COLUNAS_TABELA_CUSTOS = [
-    "Data", "Canal", "Fornecedor", "Quantidade Enviada", "Custo Unitário", "Custo Total",
+    "Data", "Canal", "Fornecedor", "Base de Cobrança", "Quantidade", "Custo Unitário", "Custo Total",
 ]
 
 
@@ -312,7 +313,7 @@ def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_c
 
 
 def registrar_callbacks(app):
-    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "custos", "diario", "documentacao"]
+    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "custos", "diario", "jornada"]
 
     @app.callback(
         [Output(f"painel-tab-{aba}", "style") for aba in ABAS],
@@ -337,6 +338,28 @@ def registrar_callbacks(app):
     )
     def salvar_diario(_n_clicks, conteudo):
         salvar_diario_estrategia(conteudo)
+        agora = dt.datetime.now().strftime("%H:%M:%S")
+        return f"Salvo às {agora}"
+
+    @app.callback(
+        Output("tabela-jornada-cobranca", "data"),
+        Input("btn-add-linha-jornada", "n_clicks"),
+        State("tabela-jornada-cobranca", "data"),
+        prevent_initial_call=True,
+    )
+    def adicionar_linha_jornada(_n_clicks, linhas):
+        linhas = list(linhas or [])
+        linhas.append({coluna: "" for coluna in COLUNAS_JORNADA_COBRANCA})
+        return linhas
+
+    @app.callback(
+        Output("status-salvar-jornada", "children"),
+        Input("btn-salvar-jornada", "n_clicks"),
+        State("tabela-jornada-cobranca", "data"),
+        prevent_initial_call=True,
+    )
+    def salvar_jornada(_n_clicks, linhas):
+        salvar_jornada_cobranca(linhas or [])
         agora = dt.datetime.now().strftime("%H:%M:%S")
         return f"Salvo às {agora}"
 
@@ -479,6 +502,9 @@ def registrar_callbacks(app):
         Output("kpi-clientes-unicos", "children"),
         Output("kpi-spin", "children"),
         Output("kpi-custo-total", "children"),
+        Output("kpi-custo-sms", "children"),
+        Output("kpi-custo-rcs", "children"),
+        Output("kpi-custo-whatsapp", "children"),
         Output("grafico-custos-dia", "figure"),
         Output("tabela-custos-container", "children"),
         Output("tabela-crm-grupo-ab-sms-container", "children"),
@@ -791,6 +817,7 @@ def registrar_callbacks(app):
             _KPIS_EMAIL_SALESFORCE["envios"],
         )
         custo_total_periodo = sum(l["custo_total"] for l in linhas_custo if l["custo_total"] is not None)
+        custo_total_por_canal = calcular_custo_total_por_canal(linhas_custo)
 
         # Funil de negociação (Home/Autenticação/Oferta/Acordo) por Grupo AB, um por
         # canal, na aba Funil por Grupo AB — usa os filtros globais (utms/grupos_ab/
@@ -989,6 +1016,9 @@ def registrar_callbacks(app):
             formatar_numero(clientes_unicos_disparados),
             f"{spin:.2f}".replace(".", ","),
             charts.formatar_reais(custo_total_periodo if linhas_custo else None),
+            charts.formatar_reais(custo_total_por_canal.get("sms")),
+            charts.formatar_reais(custo_total_por_canal.get("rcs")),
+            charts.formatar_reais(custo_total_por_canal.get("whatsapp")),
             charts.grafico_custos_por_dia(linhas_custo),
             _tabela_component(charts.formatar_tabela_custos(linhas_custo), COLUNAS_TABELA_CUSTOS),
             _tabela_component(

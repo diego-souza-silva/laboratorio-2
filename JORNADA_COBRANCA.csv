@@ -1,0 +1,10 @@
+﻿Data,Teste,Canal,Fornecedor,Descrição,Volume
+25/07/2026,Teste 1,SMS,Kolmeya,"Planejado em 24/07. Disparo proporcional por grupo de propensão (P1 a P4), 2.000 clientes em cada.",8.000 (2.000 por P)
+27/07/2026,Teste 2,Email,Salesforce,"Grupo Topo de Funil inteiro, disparo proporcional em 2 levas: 1ª leva com 9 clientes em cada P (P1 a P4); 2ª leva com 1.000 clientes em cada um de P2, P3 e P4.",3.036 (36 + 3.000)
+28/07/2026,Teste 3,WhatsApp,Ótima e Airys,"Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima e a outra metade via Airys.",
+31/07/2026,Teste 4,Email,Salesforce,"Todos os grupos estratégicos, só origens de e-mail validadas (cadastro, engajado, log, válido). Disparo previsto pra 30/07, adiado pra 31/07 porque os links trackeados não funcionavam.",
+03/08/2026,Teste 5,SMS,Kolmeya,"Disparo proporcional por grupo de propensão (P1 a P4) novamente, 2.000 clientes em cada.",8.000 (2.000 por P)
+04/08/2026,Teste 6,RCS,Ótima,Somente Topo de Funil.,8.374
+06/08/2026,Teste 7,SMS,Kolmeya,"Disparo proporcional por grupo de propensão (P1 a P4), 6.000 clientes em cada.",24.000 (6.000 por P)
+08/08/2026,Teste 8,SMS,Kolmeya,"Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
+10/08/2026,Teste 9,SMS,Kolmeya,Somente Topo de Funil.,

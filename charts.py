@@ -7,8 +7,8 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from data_processing import (
-    CANAL_CUSTO_LABEL, ETAPAS_CRM, ETAPAS_CRM_LABEL, FORNECEDOR_CUSTO_LABEL, GRUPO_AB_ORDEM,
-    GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
+    BASE_COBRANCA_LABEL, CANAL_CUSTO_LABEL, ETAPAS_CRM, ETAPAS_CRM_LABEL, FORNECEDOR_CUSTO_LABEL,
+    GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
 )
 from utils import formatar_numero, formatar_percentual, taxa
 
@@ -820,7 +820,8 @@ def formatar_tabela_custos(linhas: list[dict]) -> list[dict]:
             "Data": linha["data"].strftime("%d/%m/%Y") if linha["data"] else "Período completo (sem data por envio)",
             "Canal": CANAL_CUSTO_LABEL.get(linha["canal"], linha["canal"]),
             "Fornecedor": FORNECEDOR_CUSTO_LABEL.get(linha["fornecedor"], linha["fornecedor"]),
-            "Quantidade Enviada": formatar_numero(linha["quantidade_enviada"]),
+            "Base de Cobrança": BASE_COBRANCA_LABEL.get(linha["base_cobranca"], linha["base_cobranca"]),
+            "Quantidade": formatar_numero(linha["quantidade"]),
             "Custo Unitário": formatar_reais(linha["custo_unitario"], casas=4),
             "Custo Total": formatar_reais(linha["custo_total"]),
         })

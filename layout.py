@@ -5,11 +5,11 @@ from dash import dash_table, dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, STATUS_FUNIL_ORDEM,
-    agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
+    CAMPANHAS_ESCOPO, COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
+    STATUS_FUNIL_ORDEM, agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
     calcular_kpis_email_salesforce, carregar_dados_airys, carregar_dados_email_salesforce,
     carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    extremos_data_hora, ler_diario_estrategia,
+    carregar_jornada_cobranca, extremos_data_hora, ler_diario_estrategia,
 )
 from charts import (
     CORES, GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, formatar_tabela_email_salesforce,
@@ -995,19 +995,32 @@ def _aba_custos() -> html.Div:
             [
                 html.I(className="bi bi-currency-dollar me-2"),
                 html.B("Como o custo é calculado: "),
-                "Custo = Quantidade ENVIADA × custo unitário do fornecedor — não entram "
-                "entregues, lidos, respondidos, cliques ou acordos, só o que foi de fato "
-                "disparado. Custos unitários confirmados: Kolmeya SMS R$ 0,0620, Ótima "
-                "SMS R$ 0,0500, Ótima RCS R$ 0,0900. WhatsApp (Ótima/Airys) e Email "
-                "(Salesforce, que roda sobre um saldo pré-pago) ainda não têm custo "
-                "unitário informado — aparecem na tabela com o volume enviado, sem "
-                "inventar um valor. Detalhes completos na aba \"O Que Foi Feito\".",
+                "Custo = Quantidade tarifada × custo unitário do fornecedor — cada "
+                "fornecedor cobra por uma etapa diferente do funil (a coluna \"Base de "
+                "Cobrança\" da tabela mostra qual). Custos unitários confirmados: "
+                "Kolmeya SMS R$ 0,0620 (por enviado), Ótima SMS R$ 0,0500 (por enviado), "
+                "Ótima RCS R$ 0,0900 (por disparado), Ótima WhatsApp R$ 0,0685 (por "
+                "entregue). WhatsApp Airys e Email (Salesforce, que roda sobre um saldo "
+                "pré-pago) ainda não têm custo unitário informado — aparecem na tabela "
+                "com o volume, sem inventar um valor.",
             ],
             color="info", className="mb-3",
         ),
         dbc.Row([
             dbc.Col(
                 _cartao_kpi("kpi-custo-total", "Custo Total do Período", "bi-cash-stack", "#2ECC71"),
+                xs=12, sm=6, md=4, lg=3,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-custo-sms", "Custo SMS", "bi-chat-dots-fill", "#3DA9FC"),
+                xs=12, sm=6, md=4, lg=3,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-custo-rcs", "Custo RCS", "bi-broadcast", "#F5A623"),
+                xs=12, sm=6, md=4, lg=3,
+            ),
+            dbc.Col(
+                _cartao_kpi("kpi-custo-whatsapp", "Custo WhatsApp", "bi-whatsapp", "#2ECC71"),
                 xs=12, sm=6, md=4, lg=3,
             ),
         ], className="g-3 mb-3"),
@@ -1024,71 +1037,60 @@ def _aba_custos() -> html.Div:
     ])
 
 
-def _item_documentacao(titulo: str, itens: list[str]) -> dbc.Card:
-    return dbc.Card(
-        dbc.CardBody([
-            html.H6(titulo, className="mb-3"),
-            html.Ul([html.Li(item) for item in itens]),
-        ]),
-        className="cartao-grafico shadow-sm mb-3",
-    )
-
-
-def _aba_documentacao() -> html.Div:
+def _aba_jornada_cobranca() -> html.Div:
     return html.Div([
         dbc.Alert(
             [
-                html.I(className="bi bi-journal-check me-2"),
-                "Histórico simples das alterações e regras de negócio usadas no "
-                "dashboard, pra qualquer pessoa que acessar entender como os números "
-                "foram calculados sem precisar olhar o código.",
+                html.I(className="bi bi-signpost-2-fill me-2"),
+                "Histórico das rodadas de disparo (\"testes\") — data, canal, fornecedor "
+                "e o que foi feito em cada uma. Edite direto nas células, use \"Adicionar "
+                "Linha\" pra registrar um novo teste e \"Salvar\" pra gravar em "
+                "JORNADA_COBRANCA.csv — fica registrado mesmo depois de reiniciar o "
+                "dashboard. Diferente do Diário (bloco de notas livre), aqui cada linha é "
+                "um teste com campos fixos, fácil de consultar depois.",
             ],
             color="info", className="mb-3",
         ),
-        _item_documentacao("Custos de disparo", [
-            "Fórmula: Custo = Quantidade ENVIADA × Custo Unitário do fornecedor — nunca "
-            "entregue, lido, respondido, clique ou acordo.",
-            "Kolmeya (SMS): R$ 0,0620 por envio.",
-            "Ótima (SMS): R$ 0,0500 por envio.",
-            "Ótima (RCS): R$ 0,0900 por envio.",
-            "WhatsApp (Ótima e Airys): custo unitário ainda não informado pelo negócio — "
-            "não foi estimado nem inventado; a aba Custos mostra o volume enviado sem "
-            "custo.",
-            "Email (Salesforce): custo unitário ainda não informado — a operação roda "
-            "sobre um saldo pré-pago já contratado, não um custo por envio calculado "
-            "aqui.",
-            "A tabela e o gráfico de custos respeitam os mesmos filtros globais "
-            "(campanha, período, hora, grupo AB, grupo estratégico) do resto do "
-            "dashboard.",
-        ]),
-        _item_documentacao("SPIN (aba Funil Geral)", [
-            "SPIN = Total de disparos (linhas de evento, mesmo cliente pode aparecer "
-            "mais de uma vez) ÷ Clientes Únicos (telefone deduplicado) — mede quantas "
-            "vezes, em média, a base foi rodada no período filtrado.",
-            "Considera SMS + WhatsApp (Ótima e Airys) + RCS, com os mesmos filtros "
-            "globais aplicados.",
-        ]),
-        _item_documentacao("Pós-WhatsApp: Home vs Lido por fornecedor", [
-            "O indicador \"Home vs Lido\" combinado foi separado em dois: "
-            "\"Home vs Lido — Ótima\" e \"Home vs Lido — Airys\", cada um comparando o "
-            "Home daquele fornecedor com o Lido do mesmo fornecedor, pra dar pra "
-            "comparar desempenho entre os dois sem misturar.",
-        ]),
-        _item_documentacao("Percentuais nas tabelas de resultado", [
-            "Todas as tabelas de resultado por frase/mensagem/template e por Grupo AB "
-            "(SMS, WhatsApp Ótima, WhatsApp Airys e RCS) mostram \"quantidade "
-            "(percentual)\" em vez de só a quantidade — o percentual é sempre em "
-            "relação à etapa anterior da mesma linha (ex.: Autenticação em relação a "
-            "Home, Oferta em relação a Autenticação).",
-        ]),
-        _item_documentacao("WhatsApp Airys: telefone reconstruído", [
-            "O telefone do retorno do Airys vem corrompido no arquivo original (notação "
-            "científica do Excel) e é reconstruído a partir de outro campo do arquivo "
-            "(wamid). Esse número às vezes vem sem o 9º dígito do celular — o dashboard "
-            "tenta as duas leituras (com e sem o 9) e usa a que bate com a base de "
-            "clientes, o que recupera a maior parte dos casos que antes ficavam como "
-            "\"Não Classificado\" sem necessidade.",
-        ]),
+        dbc.Card(
+            dbc.CardBody([
+                dash_table.DataTable(
+                    id="tabela-jornada-cobranca",
+                    data=carregar_jornada_cobranca(),
+                    columns=[{"name": c, "id": c} for c in COLUNAS_JORNADA_COBRANCA],
+                    editable=True,
+                    row_deletable=True,
+                    sort_action="native",
+                    style_as_list_view=True,
+                    style_table={"overflowX": "auto"},
+                    style_header={
+                        "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
+                        "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
+                    },
+                    style_cell={
+                        "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
+                        "padding": "10px 12px", "fontSize": "0.85rem", "textAlign": "left",
+                        "whiteSpace": "normal", "height": "auto",
+                    },
+                    style_cell_conditional=[
+                        {"if": {"column_id": "Data"}, "minWidth": "110px", "width": "110px"},
+                        {"if": {"column_id": "Teste"}, "minWidth": "90px", "width": "90px"},
+                        {"if": {"column_id": "Canal"}, "minWidth": "100px", "width": "100px"},
+                        {"if": {"column_id": "Fornecedor"}, "minWidth": "120px", "width": "120px"},
+                        {"if": {"column_id": "Descrição"}, "minWidth": "420px"},
+                        {"if": {"column_id": "Volume"}, "minWidth": "140px", "width": "140px"},
+                    ],
+                    style_data_conditional=[
+                        {"if": {"row_index": "odd"}, "backgroundColor": "#121722"},
+                    ],
+                ),
+                html.Div([
+                    dbc.Button("Adicionar Linha", id="btn-add-linha-jornada", color="secondary", className="mt-3"),
+                    dbc.Button("Salvar", id="btn-salvar-jornada", color="primary", className="mt-3 ms-2"),
+                    html.Span(id="status-salvar-jornada", className="legenda-registros ms-3"),
+                ], className="d-flex align-items-center"),
+            ]),
+            className="cartao-grafico shadow-sm",
+        ),
     ])
 
 
@@ -1122,7 +1124,7 @@ def criar_layout() -> html.Div:
                             className="aba-botao"),
                 html.Button("Diário / Estratégia", id="btn-tab-diario", n_clicks=0,
                             className="aba-botao"),
-                html.Button("O Que Foi Feito", id="btn-tab-documentacao", n_clicks=0,
+                html.Button("Jornada de Cobrança", id="btn-tab-jornada", n_clicks=0,
                             className="aba-botao"),
             ], className="barra-abas"),
 
@@ -1132,7 +1134,7 @@ def criar_layout() -> html.Div:
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
             html.Div(_aba_custos(), id="painel-tab-custos", style={"display": "none"}),
             html.Div(_aba_diario(), id="painel-tab-diario", style={"display": "none"}),
-            html.Div(_aba_documentacao(), id="painel-tab-documentacao", style={"display": "none"}),
+            html.Div(_aba_jornada_cobranca(), id="painel-tab-jornada", style={"display": "none"}),
             dcc.Store(id="canal-crm-ativo", data="sms"),
         ],
         fluid=True,
