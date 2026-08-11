@@ -1094,19 +1094,21 @@ def _aba_jornada_cobranca() -> html.Div:
         dbc.Alert(
             [
                 html.I(className="bi bi-calculator-fill me-2"),
-                "Volumetria e custo calculados automaticamente a partir dos dados reais "
-                "(casando Data + Canal + Fornecedor de cada teste) — respeita os filtros "
-                "globais no topo da página. \"Total Disparado\" é tudo que saiu pra aquele "
-                "teste; \"Quantidade Cobrada\" é a etapa que o fornecedor de fato tarifa "
-                "(ver aba Custos). Quando o teste cai fora do período filtrado, ou é "
-                "Email (sem granularidade por dia), os campos ficam em \"—\" em vez de "
-                "estimar um valor.",
+                "Calculadora interativa: usa o \"Volume\" que você digita em cada linha "
+                "da tabela acima (a fonte de verdade da jornada) × o custo unitário do "
+                "fornecedor — recalcula sozinha a cada edição, linha nova ou linha "
+                "apagada, sem precisar clicar em \"Salvar\". Pra bater com a regra de "
+                "cobrança de cada fornecedor (coluna \"Base de Cobrança\", igual na aba "
+                "Custos), digite o volume da etapa que é cobrada: Enviado pro SMS "
+                "Kolmeya, Disparado pro RCS Ótima, Entregue pro WhatsApp Ótima. Linhas "
+                "com mais de um fornecedor (ex.: \"Ótima e Airys\") ou fornecedor sem "
+                "custo confirmado ficam em \"—\" — sem inventar valor.",
             ],
             color="info", className="mb-3",
         ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Volumetria e Custo por Teste", className="mb-3"),
+                html.H6("Calculadora de Custo por Teste", className="mb-3"),
                 html.Div(id="tabela-jornada-custo-container"),
             ]),
             className="cartao-grafico shadow-sm",

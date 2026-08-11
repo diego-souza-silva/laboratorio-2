@@ -8,19 +8,21 @@ from dash import Input, Output, State, ctx, dash_table, html
 
 import charts
 from data_processing import (
-    CAMPANHAS_ESCOPO, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha, agregar_crm_por_grupo_ab,
+    BASE_COBRANCA_LABEL, CAMPANHAS_ESCOPO, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha,
+    agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_custo_total_por_canal, calcular_custos_disparo,
+    agregar_whatsapp_por_grupo_estrategico, calcular_custo_jornada_manual, calcular_custo_total_por_canal,
+    calcular_custos_disparo,
     calcular_funil,
     calcular_funil_combinado_email_salesforce,
     calcular_funil_combinado_sms, calcular_funil_combinado_whatsapp, calcular_funil_whatsapp,
     calcular_kpis, calcular_kpis_email_salesforce, calcular_kpis_resposta_airys,
-    calcular_kpis_whatsapp, calcular_volumetria_jornada, canal_da_campanha, carregar_dados_airys,
+    calcular_kpis_whatsapp, canal_da_campanha, carregar_dados_airys,
     carregar_dados_crm, carregar_dados_email_salesforce, carregar_dados_rcs,
     carregar_dados_rcs_estilo_sms, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    carregar_jornada_cobranca, filtrar_dados, filtrar_dados_whatsapp,
+    filtrar_dados, filtrar_dados_whatsapp,
     fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
     montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
     salvar_diario_estrategia, salvar_jornada_cobranca, total_disparado_campanhas,
@@ -87,8 +89,8 @@ COLUNAS_TABELA_CUSTOS = [
 ]
 
 COLUNAS_TABELA_JORNADA_CUSTO = [
-    "Data", "Teste", "Canal", "Fornecedor", "Total Disparado", "Base de Cobrança",
-    "Quantidade Cobrada", "Custo",
+    "Data", "Teste", "Canal", "Fornecedor", "Volume", "Base de Cobrança",
+    "Custo Unitário", "Custo Estimado",
 ]
 
 
@@ -370,6 +372,30 @@ def registrar_callbacks(app):
         return f"Salvo às {agora}"
 
     @app.callback(
+        Output("tabela-jornada-custo-container", "children"),
+        Input("tabela-jornada-cobranca", "data"),
+    )
+    def atualizar_calculadora_jornada(linhas_jornada):
+        linhas_jornada = linhas_jornada or []
+        custos = calcular_custo_jornada_manual(linhas_jornada)
+        registros = [
+            {
+                "Data": linha.get("Data", ""),
+                "Teste": linha.get("Teste", ""),
+                "Canal": linha.get("Canal", ""),
+                "Fornecedor": linha.get("Fornecedor", ""),
+                "Volume": formatar_numero(c["volume"]) if c["volume"] is not None else "—",
+                "Base de Cobrança": BASE_COBRANCA_LABEL.get(c["base_cobranca"], "—"),
+                "Custo Unitário": (
+                    charts.formatar_reais(c["custo_unitario"], casas=4) if c["custo_unitario"] is not None else "—"
+                ),
+                "Custo Estimado": charts.formatar_reais(c["custo"]) if c["custo"] is not None else "—",
+            }
+            for linha, c in zip(linhas_jornada, custos)
+        ]
+        return _tabela_component(registros, COLUNAS_TABELA_JORNADA_CUSTO)
+
+    @app.callback(
         Output("canal-crm-ativo", "data"),
         Output("btn-canal-sms", "className"),
         Output("btn-canal-whatsapp", "className"),
@@ -521,7 +547,6 @@ def registrar_callbacks(app):
         Output("kpi-crm-home-vs-etapa", "children"),
         Output("kpi-crm-home-vs-etapa-titulo", "children"),
         Output("kpi-crm-home-vs-lido-airys", "children"),
-        Output("tabela-jornada-custo-container", "children"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -531,11 +556,10 @@ def registrar_callbacks(app):
         Input("filtro-grupo-estrategico", "value"),
         Input("filtro-utm-crm", "value"),
         Input("canal-crm-ativo", "data"),
-        Input("btn-salvar-jornada", "n_clicks"),
     )
     def atualizar_dashboard(
         utms, data_ini, data_fim, faixa_hora, status, grupos_ab, grupos_estrategicos,
-        utms_crm, canal_crm, _n_clicks_salvar_jornada,
+        utms_crm, canal_crm,
     ):
         # `carregar_dados_sms()` descobre TODO arquivo de ARQUIVOS PARA DISPAROS/,
         # de qualquer canal (SMS/WhatsApp/Airys/RCS/Email) — restringe aqui às
@@ -827,30 +851,6 @@ def registrar_callbacks(app):
         custo_total_periodo = sum(l["custo_total"] for l in linhas_custo if l["custo_total"] is not None)
         custo_total_por_canal = calcular_custo_total_por_canal(linhas_custo)
 
-        registros_jornada = carregar_jornada_cobranca()
-        volumetria_jornada = calcular_volumetria_jornada(registros_jornada, linhas_custo)
-        tabela_jornada_custo = [
-            {
-                "Data": registro.get("Data", ""),
-                "Teste": registro.get("Teste", ""),
-                "Canal": registro.get("Canal", ""),
-                "Fornecedor": registro.get("Fornecedor", ""),
-                "Total Disparado": (
-                    formatar_numero(vol["total_disparado"]) if vol["total_disparado"] is not None else "—"
-                ),
-                "Base de Cobrança": (
-                    {"disparado": "Disparado", "enviado": "Enviado", "entregue": "Entregue"}.get(
-                        vol["base_cobranca"], "—",
-                    )
-                ),
-                "Quantidade Cobrada": (
-                    formatar_numero(vol["quantidade_cobrada"]) if vol["quantidade_cobrada"] is not None else "—"
-                ),
-                "Custo": charts.formatar_reais(vol["custo"]) if vol["custo"] is not None else "—",
-            }
-            for registro, vol in zip(registros_jornada, volumetria_jornada)
-        ]
-
         # Funil de negociação (Home/Autenticação/Oferta/Acordo) por Grupo AB, um por
         # canal, na aba Funil por Grupo AB — usa os filtros globais (utms/grupos_ab/
         # grupos_estrategicos), não o filtro de UTM específico da aba CRM.
@@ -1073,5 +1073,4 @@ def registrar_callbacks(app):
             formatar_percentual(home_vs_etapa_valor),
             home_vs_etapa_titulo,
             formatar_percentual(home_vs_lido_airys_valor),
-            _tabela_component(tabela_jornada_custo, COLUNAS_TABELA_JORNADA_CUSTO),
         )

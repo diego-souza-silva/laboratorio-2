@@ -21,7 +21,6 @@ Cada telefone do arquivo de retorno sempre existe na base de disparo corresponde
 from __future__ import annotations
 
 import base64
-import datetime as dt
 import re
 from pathlib import Path
 
@@ -1690,7 +1689,6 @@ def _montar_linha_custo(data, canal: str, fornecedor: str, quantidades) -> dict 
         "data": data, "canal": canal, "fornecedor": fornecedor, "base_cobranca": base,
         "quantidade": quantidade, "custo_unitario": custo_unitario,
         "custo_total": (quantidade * custo_unitario) if custo_unitario is not None else None,
-        "disparado": int(quantidades["disparado"]),
     }
 
 
@@ -1714,7 +1712,6 @@ def calcular_custos_disparo(
         linhas.append({
             "data": None, "canal": "email", "fornecedor": "salesforce", "base_cobranca": "enviado",
             "quantidade": int(envios_email), "custo_unitario": None, "custo_total": None,
-            "disparado": int(envios_email),
         })
     linhas.sort(key=lambda l: (l["data"] is None, l["data"], l["canal"], l["fornecedor"]))
     return linhas
@@ -1817,47 +1814,47 @@ def salvar_jornada_cobranca(registros: list[dict]) -> None:
 
 _CANAL_LABEL_PARA_CHAVE = {v.lower(): k for k, v in CANAL_CUSTO_LABEL.items()}
 _FORNECEDOR_LABEL_PARA_CHAVE = {v.lower(): k for k, v in FORNECEDOR_CUSTO_LABEL.items()}
+_VOLUME_NUMERO_RE = re.compile(r"[\d.,]+")
 
 
-def calcular_volumetria_jornada(registros_jornada: list[dict], linhas_custo: list[dict]) -> list[dict]:
-    """Cruza cada linha da Jornada de Cobrança (campos "Data"/"Canal"/"Fornecedor",
-    texto livre digitado pelo usuário) com as linhas de custo já calculadas pros
-    filtros ativos do dashboard (`calcular_custos_disparo`), devolvendo o total
-    disparado, a quantidade cobrada (conforme a base de cobrança do fornecedor) e o
-    custo daquele teste — assim dá pra ver o custo de cada rodada de disparo sem
-    duplicar a lógica de cobrança. "Fornecedor" aceita mais de um nome (ex.: "Ótima e
-    Airys" no teste que dividiu a base), somando as linhas de custo de cada um. Quando
-    a data/canal/fornecedor não bate com nenhuma linha de custo — fora do período
-    filtrado, ou canal sem granularidade por dia (Email, ver `calcular_custos_disparo`)
-    — os campos voltam vazios em vez de estimar um valor."""
+def _parse_volume_jornada(valor) -> int | None:
+    """Extrai o primeiro número do campo "Volume" da Jornada de Cobrança — aceita texto
+    livre como "8.000 (2.000 por P)" ou só "8000"/"8.000", tratando ponto/vírgula como
+    separador de milhar. Sem número reconhecível, volta None."""
+    if not isinstance(valor, str):
+        return None
+    m = _VOLUME_NUMERO_RE.search(valor)
+    if not m:
+        return None
+    digitos = re.sub(r"[.,]", "", m.group())
+    return int(digitos) if digitos else None
+
+
+def calcular_custo_jornada_manual(registros_jornada: list[dict]) -> list[dict]:
+    """Calculadora interativa da Jornada de Cobrança: usa o "Volume" digitado pelo
+    usuário em cada teste (a fonte de verdade da jornada, editável direto na tabela —
+    ver alerta da aba) e o custo unitário do fornecedor
+    (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`) pra estimar o custo, recalculando a cada
+    edição/linha nova, sem precisar salvar. Só calcula quando Canal e Fornecedor batem
+    com exatamente UM fornecedor de custo conhecido — linhas com mais de um fornecedor
+    (ex.: "Ótima e Airys", teste que dividiu a base) não dá pra estimar sem inventar a
+    proporção de cada um, então ficam sem custo."""
     resultado = []
     for registro in registros_jornada:
-        data_str = (registro.get("Data") or "").strip()
-        try:
-            data = dt.datetime.strptime(data_str, "%d/%m/%Y").date() if data_str else None
-        except ValueError:
-            data = None
+        volume = _parse_volume_jornada(registro.get("Volume"))
         canal_chave = _CANAL_LABEL_PARA_CHAVE.get((registro.get("Canal") or "").strip().lower())
-        fornecedores_chave = [
-            _FORNECEDOR_LABEL_PARA_CHAVE[parte]
-            for parte in (p.strip().lower() for p in re.split(r"\s+e\s+|,", registro.get("Fornecedor") or ""))
-            if parte in _FORNECEDOR_LABEL_PARA_CHAVE
+        fornecedores_texto = [
+            p.strip().lower() for p in re.split(r"\s+e\s+|,", registro.get("Fornecedor") or "") if p.strip()
         ]
-        candidatas = [
-            l for l in linhas_custo
-            if data and l["data"] == data and l["canal"] == canal_chave and l["fornecedor"] in fornecedores_chave
-        ] if (canal_chave and fornecedores_chave) else []
-        if not candidatas:
-            resultado.append({
-                "total_disparado": None, "base_cobranca": None,
-                "quantidade_cobrada": None, "custo": None,
-            })
+        fornecedor_chave = (
+            _FORNECEDOR_LABEL_PARA_CHAVE.get(fornecedores_texto[0]) if len(fornecedores_texto) == 1 else None
+        )
+        config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
+        if volume is None or config is None:
+            resultado.append({"volume": volume, "base_cobranca": None, "custo_unitario": None, "custo": None})
             continue
-        custos = [l["custo_total"] for l in candidatas]
         resultado.append({
-            "total_disparado": sum(l["disparado"] for l in candidatas),
-            "base_cobranca": candidatas[0]["base_cobranca"],
-            "quantidade_cobrada": sum(l["quantidade"] for l in candidatas),
-            "custo": sum(custos) if all(c is not None for c in custos) else None,
+            "volume": volume, "base_cobranca": config["base"],
+            "custo_unitario": config["custo_unitario"], "custo": volume * config["custo_unitario"],
         })
     return resultado
