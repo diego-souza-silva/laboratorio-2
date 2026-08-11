@@ -1042,12 +1042,17 @@ def _aba_jornada_cobranca() -> html.Div:
         dbc.Alert(
             [
                 html.I(className="bi bi-signpost-2-fill me-2"),
-                "Histórico das rodadas de disparo (\"testes\") — data, canal, fornecedor "
-                "e o que foi feito em cada uma. Edite direto nas células, use \"Adicionar "
-                "Linha\" pra registrar um novo teste e \"Salvar\" pra gravar em "
-                "JORNADA_COBRANCA.csv — fica registrado mesmo depois de reiniciar o "
-                "dashboard. Diferente do Diário (bloco de notas livre), aqui cada linha é "
-                "um teste com campos fixos, fácil de consultar depois.",
+                "Histórico das rodadas de disparo (\"testes\") — data, canal, fornecedor, "
+                "UTM(s) usada(s) e o que foi feito em cada uma. Edite direto nas células, "
+                "use \"Adicionar Linha\" pra registrar um novo teste e \"Salvar\" pra "
+                "gravar em JORNADA_COBRANCA.csv — fica registrado mesmo depois de "
+                "reiniciar o dashboard. Diferente do Diário (bloco de notas livre), aqui "
+                "cada linha é um teste com campos fixos, fácil de consultar depois. A "
+                "coluna \"UTM(s)\" precisa bater com o nome do arquivo em ARQUIVOS PARA "
+                "DISPAROS/ (sem \".csv\"), separando por vírgula quando o teste usou mais "
+                "de uma campanha — é o que alimenta a calculadora abaixo. Ótima e Airys "
+                "de um mesmo teste ficam em linhas separadas, já que são fornecedores "
+                "diferentes (custo unitário e UTM próprios).",
             ],
             color="info", className="mb-3",
         ),
@@ -1076,6 +1081,7 @@ def _aba_jornada_cobranca() -> html.Div:
                         {"if": {"column_id": "Teste"}, "minWidth": "90px", "width": "90px"},
                         {"if": {"column_id": "Canal"}, "minWidth": "100px", "width": "100px"},
                         {"if": {"column_id": "Fornecedor"}, "minWidth": "120px", "width": "120px"},
+                        {"if": {"column_id": "UTM(s)"}, "minWidth": "320px"},
                         {"if": {"column_id": "Descrição"}, "minWidth": "420px"},
                         {"if": {"column_id": "Volume"}, "minWidth": "140px", "width": "140px"},
                     ],
@@ -1094,15 +1100,16 @@ def _aba_jornada_cobranca() -> html.Div:
         dbc.Alert(
             [
                 html.I(className="bi bi-calculator-fill me-2"),
-                "Calculadora interativa: usa o \"Volume\" que você digita em cada linha "
-                "da tabela acima (a fonte de verdade da jornada) × o custo unitário do "
-                "fornecedor — recalcula sozinha a cada edição, linha nova ou linha "
-                "apagada, sem precisar clicar em \"Salvar\". Pra bater com a regra de "
-                "cobrança de cada fornecedor (coluna \"Base de Cobrança\", igual na aba "
-                "Custos), digite o volume da etapa que é cobrada: Enviado pro SMS "
-                "Kolmeya, Disparado pro RCS Ótima, Entregue pro WhatsApp Ótima. Linhas "
-                "com mais de um fornecedor (ex.: \"Ótima e Airys\") ou fornecedor sem "
-                "custo confirmado ficam em \"—\" — sem inventar valor.",
+                "Calculadora interativa: busca o \"Total Disparado\" direto do arquivo de "
+                "disparo (pasta ARQUIVOS PARA DISPAROS, a mesma fonte usada no resto do "
+                "dashboard) pela(s) UTM(s) da linha, e a quantidade cobrada dos dados "
+                "reais de retorno daquela(s) UTM(s), conforme a base de cobrança do "
+                "fornecedor (coluna \"Base de Cobrança\", igual na aba Custos) × o custo "
+                "unitário — recalcula sozinha a cada edição, linha nova ou linha apagada, "
+                "sem precisar clicar em \"Salvar\". Email não tem telefone no arquivo de "
+                "disparo (fica sem Total Disparado); linhas com mais de um fornecedor "
+                "(ex.: \"Ótima e Airys\" na mesma célula) ou sem custo confirmado ficam "
+                "em \"—\" — sem inventar valor.",
             ],
             color="info", className="mb-3",
         ),

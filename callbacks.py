@@ -13,7 +13,7 @@ from data_processing import (
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_custo_jornada_manual, calcular_custo_total_por_canal,
+    agregar_whatsapp_por_grupo_estrategico, calcular_custo_jornada_por_utm, calcular_custo_total_por_canal,
     calcular_custos_disparo,
     calcular_funil,
     calcular_funil_combinado_email_salesforce,
@@ -89,7 +89,7 @@ COLUNAS_TABELA_CUSTOS = [
 ]
 
 COLUNAS_TABELA_JORNADA_CUSTO = [
-    "Data", "Teste", "Canal", "Fornecedor", "Volume", "Base de Cobrança",
+    "Data", "Teste", "Canal", "Fornecedor", "UTM(s)", "Total Disparado", "Base de Cobrança",
     "Custo Unitário", "Custo Estimado",
 ]
 
@@ -377,14 +377,20 @@ def registrar_callbacks(app):
     )
     def atualizar_calculadora_jornada(linhas_jornada):
         linhas_jornada = linhas_jornada or []
-        custos = calcular_custo_jornada_manual(linhas_jornada)
+        custos = calcular_custo_jornada_por_utm(
+            linhas_jornada, carregar_dados_sms(), carregar_dados_rcs_estilo_sms(),
+            carregar_dados_whatsapp_mensagem(), carregar_dados_airys(),
+        )
         registros = [
             {
                 "Data": linha.get("Data", ""),
                 "Teste": linha.get("Teste", ""),
                 "Canal": linha.get("Canal", ""),
                 "Fornecedor": linha.get("Fornecedor", ""),
-                "Volume": formatar_numero(c["volume"]) if c["volume"] is not None else "—",
+                "UTM(s)": linha.get("UTM(s)", ""),
+                "Total Disparado": (
+                    formatar_numero(c["total_disparado"]) if c["total_disparado"] is not None else "—"
+                ),
                 "Base de Cobrança": BASE_COBRANCA_LABEL.get(c["base_cobranca"], "—"),
                 "Custo Unitário": (
                     charts.formatar_reais(c["custo_unitario"], casas=4) if c["custo_unitario"] is not None else "—"

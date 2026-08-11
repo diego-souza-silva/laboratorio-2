@@ -1733,30 +1733,41 @@ def calcular_custo_total_por_canal(linhas_custo: list[dict]) -> dict:
 # Registro editável (pela própria aba do dashboard) de cada rodada de disparo —
 # igual um histórico de testes, não um cálculo derivado dos dados. Persistido em
 # CSV pra sobreviver a reinícios, no mesmo espírito do Diário de Estratégia.
-COLUNAS_JORNADA_COBRANCA = ["Data", "Teste", "Canal", "Fornecedor", "Descrição", "Volume"]
+COLUNAS_JORNADA_COBRANCA = ["Data", "Teste", "Canal", "Fornecedor", "UTM(s)", "Descrição", "Volume"]
 
 _JORNADA_COBRANCA_PADRAO = [
     {
         "Data": "25/07/2026", "Teste": "Teste 1", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "UTM(s)": "20260725-abandonocarrinhodia25-kolmeya, 20260725-cadastradodia25-kolmeya, "
+                   "20260725-engajadodia25-kolmeya, 20260725-topofunildia25-kolmeya",
         "Descrição": "Planejado em 24/07. Disparo proporcional por grupo de propensão "
                       "(P1 a P4), 2.000 clientes em cada.",
         "Volume": "8.000 (2.000 por P)",
     },
     {
         "Data": "27/07/2026", "Teste": "Teste 2", "Canal": "Email", "Fornecedor": "Salesforce",
+        "UTM(s)": "20260727-CBtopofunildia27-salesforce",
         "Descrição": "Grupo Topo de Funil inteiro, disparo proporcional em 2 levas: 1ª "
                       "leva com 9 clientes em cada P (P1 a P4); 2ª leva com 1.000 "
                       "clientes em cada um de P2, P3 e P4.",
         "Volume": "3.036 (36 + 3.000)",
     },
     {
-        "Data": "28/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Ótima e Airys",
-        "Descrição": "Mesma base dos testes de 25/07 e 27/07, metade disparada via "
-                      "Ótima e a outra metade via Airys.",
+        "Data": "28/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Ótima",
+        "UTM(s)": "20260728-CBlaboratorionowpp-otima",
+        "Descrição": "Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima.",
+        "Volume": "",
+    },
+    {
+        "Data": "29/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Airys",
+        "UTM(s)": "20260728-CBlaboratorionowpp-airys",
+        "Descrição": "Mesma base dos testes de 25/07 e 27/07, a outra metade disparada via Airys.",
         "Volume": "",
     },
     {
         "Data": "31/07/2026", "Teste": "Teste 4", "Canal": "Email", "Fornecedor": "Salesforce",
+        "UTM(s)": "20260730-CBabandonocarrinhodia30-salesforce, 20260730-CBcadastradodia30-salesforce, "
+                   "20260730-CBengajadodia30-salesforce, 20260730-CBtopofunildia30-salesforce",
         "Descrição": "Todos os grupos estratégicos, só origens de e-mail validadas "
                       "(cadastro, engajado, log, válido). Disparo previsto pra 30/07, "
                       "adiado pra 31/07 porque os links trackeados não funcionavam.",
@@ -1764,28 +1775,36 @@ _JORNADA_COBRANCA_PADRAO = [
     },
     {
         "Data": "03/08/2026", "Teste": "Teste 5", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "UTM(s)": "20260803-abandonocarrinhodia03-kolmeya, 20260803-engajadodia03-kolmeya, "
+                   "20260803-topofunildia03-kolmeya, 20260804-cadastradodia03-kolmeya",
         "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4) novamente, "
                       "2.000 clientes em cada.",
         "Volume": "8.000 (2.000 por P)",
     },
     {
         "Data": "04/08/2026", "Teste": "Teste 6", "Canal": "RCS", "Fornecedor": "Ótima",
+        "UTM(s)": "20260804-CBtopofunildia4RCS-otima",
         "Descrição": "Somente Topo de Funil.",
         "Volume": "8.374",
     },
     {
         "Data": "06/08/2026", "Teste": "Teste 7", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "UTM(s)": "20260806-CBabandonocarrinhodia06-kolmeya, 20260806-CBcadastradodia06-kolmeya, "
+                   "20260806-CBengajadodia06-kolmeya, 20260806-CBtopofunildia06-kolmeya",
         "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4), 6.000 "
                       "clientes em cada.",
         "Volume": "24.000 (6.000 por P)",
     },
     {
         "Data": "08/08/2026", "Teste": "Teste 8", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "UTM(s)": "20260808-CBabandonocarrinhodia08-kolmeya, 20260808-CBengajadodia08-kolmeya, "
+                   "20260808-cadastradodia08-kolmeya",
         "Descrição": "Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
         "Volume": "",
     },
     {
         "Data": "10/08/2026", "Teste": "Teste 9", "Canal": "SMS", "Fornecedor": "Kolmeya",
+        "UTM(s)": "20260810-CBtopofunildia10-kolmeya",
         "Descrição": "Somente Topo de Funil.",
         "Volume": "",
     },
@@ -1814,34 +1833,24 @@ def salvar_jornada_cobranca(registros: list[dict]) -> None:
 
 _CANAL_LABEL_PARA_CHAVE = {v.lower(): k for k, v in CANAL_CUSTO_LABEL.items()}
 _FORNECEDOR_LABEL_PARA_CHAVE = {v.lower(): k for k, v in FORNECEDOR_CUSTO_LABEL.items()}
-_VOLUME_NUMERO_RE = re.compile(r"[\d.,]+")
 
 
-def _parse_volume_jornada(valor) -> int | None:
-    """Extrai o primeiro número do campo "Volume" da Jornada de Cobrança — aceita texto
-    livre como "8.000 (2.000 por P)" ou só "8000"/"8.000", tratando ponto/vírgula como
-    separador de milhar. Sem número reconhecível, volta None."""
-    if not isinstance(valor, str):
-        return None
-    m = _VOLUME_NUMERO_RE.search(valor)
-    if not m:
-        return None
-    digitos = re.sub(r"[.,]", "", m.group())
-    return int(digitos) if digitos else None
-
-
-def calcular_custo_jornada_manual(registros_jornada: list[dict]) -> list[dict]:
-    """Calculadora interativa da Jornada de Cobrança: usa o "Volume" digitado pelo
-    usuário em cada teste (a fonte de verdade da jornada, editável direto na tabela —
-    ver alerta da aba) e o custo unitário do fornecedor
-    (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`) pra estimar o custo, recalculando a cada
-    edição/linha nova, sem precisar salvar. Só calcula quando Canal e Fornecedor batem
-    com exatamente UM fornecedor de custo conhecido — linhas com mais de um fornecedor
-    (ex.: "Ótima e Airys", teste que dividiu a base) não dá pra estimar sem inventar a
-    proporção de cada um, então ficam sem custo."""
+def calcular_custo_jornada_por_utm(
+    registros_jornada: list[dict], df_sms: pd.DataFrame, df_rcs: pd.DataFrame,
+    df_whatsapp_otima: pd.DataFrame, df_whatsapp_airys: pd.DataFrame,
+) -> list[dict]:
+    """Calculadora interativa da Jornada de Cobrança: usa a(s) UTM(s) digitada(s) em
+    cada teste — o mesmo identificador da pasta ARQUIVOS PARA DISPAROS — pra buscar o
+    Total Disparado direto do arquivo de disparo (`total_disparado_campanhas`, ground
+    truth, sem depender de casar por data) e a quantidade cobrada, calculada dos dados
+    reais de retorno daquela(s) UTM(s) conforme a base de cobrança do fornecedor
+    (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`). Recalcula a cada edição/linha nova/linha
+    removida, sem precisar salvar. Email não tem telefone no arquivo de disparo (fica
+    sem Total Disparado); fornecedor com mais de um nome (célula tipo "Ótima e Airys")
+    ou sem custo confirmado fica sem custo — sem inventar a proporção entre eles."""
     resultado = []
     for registro in registros_jornada:
-        volume = _parse_volume_jornada(registro.get("Volume"))
+        utms = [u.strip() for u in (registro.get("UTM(s)") or "").split(",") if u.strip()]
         canal_chave = _CANAL_LABEL_PARA_CHAVE.get((registro.get("Canal") or "").strip().lower())
         fornecedores_texto = [
             p.strip().lower() for p in re.split(r"\s+e\s+|,", registro.get("Fornecedor") or "") if p.strip()
@@ -1849,12 +1858,45 @@ def calcular_custo_jornada_manual(registros_jornada: list[dict]) -> list[dict]:
         fornecedor_chave = (
             _FORNECEDOR_LABEL_PARA_CHAVE.get(fornecedores_texto[0]) if len(fornecedores_texto) == 1 else None
         )
-        config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
-        if volume is None or config is None:
-            resultado.append({"volume": volume, "base_cobranca": None, "custo_unitario": None, "custo": None})
+
+        if not utms or canal_chave is None:
+            resultado.append({"total_disparado": None, "base_cobranca": None, "custo_unitario": None, "custo": None})
             continue
+
+        total_disparado = None if canal_chave == "email" else total_disparado_campanhas(utms)
+
+        config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
+        if config is None:
+            resultado.append({
+                "total_disparado": total_disparado, "base_cobranca": None,
+                "custo_unitario": None, "custo": None,
+            })
+            continue
+
+        if canal_chave == "sms":
+            subset = filtrar_dados(df_sms, utms=utms)
+            quantidades = {
+                "disparado": int(subset["disparado"].sum()), "enviado": int(subset["enviado"].sum()),
+                "entregue": int(subset["entregue"].sum()),
+            }
+        elif canal_chave == "rcs":
+            subset = filtrar_dados(df_rcs, utms=utms)
+            quantidades = {
+                "disparado": int(subset["disparado"].sum()), "enviado": int(subset["enviado"].sum()),
+                "entregue": int(subset["entregue"].sum()),
+            }
+        else:
+            df_fonte = df_whatsapp_otima if fornecedor_chave == "otima" else df_whatsapp_airys
+            subset = filtrar_dados_whatsapp(df_fonte, utms=utms, canal="whatsapp")
+            quantidades = {
+                "disparado": len(subset),
+                "enviado": int((subset["situacao_norm"] != "Nao Enviado").sum()),
+                "entregue": int(subset["situacao_norm"].isin(["Entregue", "Lido"]).sum()),
+            }
+
+        quantidade_cobrada = quantidades[config["base"]]
         resultado.append({
-            "volume": volume, "base_cobranca": config["base"],
-            "custo_unitario": config["custo_unitario"], "custo": volume * config["custo_unitario"],
+            "total_disparado": total_disparado, "base_cobranca": config["base"],
+            "custo_unitario": config["custo_unitario"], "custo": quantidade_cobrada * config["custo_unitario"],
         })
     return resultado
