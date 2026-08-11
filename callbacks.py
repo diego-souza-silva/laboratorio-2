@@ -90,7 +90,7 @@ COLUNAS_TABELA_CUSTOS = [
 
 COLUNAS_TABELA_JORNADA_CUSTO = [
     "Data", "Teste", "Canal", "Fornecedor", "UTM(s)", "Total Disparado", "Base de Cobrança",
-    "Custo Unitário", "Custo Estimado",
+    "Quantidade Cobrada", "% sobre Disparado", "Custo Unitário", "Custo Estimado",
 ]
 
 
@@ -392,6 +392,13 @@ def registrar_callbacks(app):
                     formatar_numero(c["total_disparado"]) if c["total_disparado"] is not None else "—"
                 ),
                 "Base de Cobrança": BASE_COBRANCA_LABEL.get(c["base_cobranca"], "—"),
+                "Quantidade Cobrada": (
+                    formatar_numero(c["quantidade_cobrada"]) if c["quantidade_cobrada"] is not None else "—"
+                ),
+                "% sobre Disparado": (
+                    formatar_percentual(taxa(c["quantidade_cobrada"], c["total_disparado"]))
+                    if c["quantidade_cobrada"] is not None and c["total_disparado"] else "—"
+                ),
                 "Custo Unitário": (
                     charts.formatar_reais(c["custo_unitario"], casas=4) if c["custo_unitario"] is not None else "—"
                 ),

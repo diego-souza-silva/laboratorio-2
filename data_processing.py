@@ -1742,7 +1742,7 @@ _JORNADA_COBRANCA_PADRAO = [
                    "20260725-engajadodia25-kolmeya, 20260725-topofunildia25-kolmeya",
         "Descrição": "Planejado em 24/07. Disparo proporcional por grupo de propensão "
                       "(P1 a P4), 2.000 clientes em cada.",
-        "Volume": "8.000 (2.000 por P)",
+        "Volume": "8.024",
     },
     {
         "Data": "27/07/2026", "Teste": "Teste 2", "Canal": "Email", "Fornecedor": "Salesforce",
@@ -1756,13 +1756,13 @@ _JORNADA_COBRANCA_PADRAO = [
         "Data": "28/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Ótima",
         "UTM(s)": "20260728-CBlaboratorionowpp-otima",
         "Descrição": "Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima.",
-        "Volume": "",
+        "Volume": "3.807",
     },
     {
         "Data": "29/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Airys",
         "UTM(s)": "20260728-CBlaboratorionowpp-airys",
         "Descrição": "Mesma base dos testes de 25/07 e 27/07, a outra metade disparada via Airys.",
-        "Volume": "",
+        "Volume": "3.804",
     },
     {
         "Data": "31/07/2026", "Teste": "Teste 4", "Canal": "Email", "Fornecedor": "Salesforce",
@@ -1779,13 +1779,13 @@ _JORNADA_COBRANCA_PADRAO = [
                    "20260803-topofunildia03-kolmeya, 20260804-cadastradodia03-kolmeya",
         "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4) novamente, "
                       "2.000 clientes em cada.",
-        "Volume": "8.000 (2.000 por P)",
+        "Volume": "8.026",
     },
     {
         "Data": "04/08/2026", "Teste": "Teste 6", "Canal": "RCS", "Fornecedor": "Ótima",
         "UTM(s)": "20260804-CBtopofunildia4RCS-otima",
         "Descrição": "Somente Topo de Funil.",
-        "Volume": "8.374",
+        "Volume": "8.372",
     },
     {
         "Data": "06/08/2026", "Teste": "Teste 7", "Canal": "SMS", "Fornecedor": "Kolmeya",
@@ -1793,20 +1793,20 @@ _JORNADA_COBRANCA_PADRAO = [
                    "20260806-CBengajadodia06-kolmeya, 20260806-CBtopofunildia06-kolmeya",
         "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4), 6.000 "
                       "clientes em cada.",
-        "Volume": "24.000 (6.000 por P)",
+        "Volume": "18.356",
     },
     {
         "Data": "08/08/2026", "Teste": "Teste 8", "Canal": "SMS", "Fornecedor": "Kolmeya",
         "UTM(s)": "20260808-CBabandonocarrinhodia08-kolmeya, 20260808-CBengajadodia08-kolmeya, "
                    "20260808-cadastradodia08-kolmeya",
         "Descrição": "Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
-        "Volume": "",
+        "Volume": "8.186",
     },
     {
         "Data": "10/08/2026", "Teste": "Teste 9", "Canal": "SMS", "Fornecedor": "Kolmeya",
         "UTM(s)": "20260810-CBtopofunildia10-kolmeya",
         "Descrição": "Somente Topo de Funil.",
-        "Volume": "",
+        "Volume": "5.278",
     },
 ]
 
@@ -1860,7 +1860,10 @@ def calcular_custo_jornada_por_utm(
         )
 
         if not utms or canal_chave is None:
-            resultado.append({"total_disparado": None, "base_cobranca": None, "custo_unitario": None, "custo": None})
+            resultado.append({
+                "total_disparado": None, "base_cobranca": None, "quantidade_cobrada": None,
+                "custo_unitario": None, "custo": None,
+            })
             continue
 
         total_disparado = None if canal_chave == "email" else total_disparado_campanhas(utms)
@@ -1868,7 +1871,7 @@ def calcular_custo_jornada_por_utm(
         config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
         if config is None:
             resultado.append({
-                "total_disparado": total_disparado, "base_cobranca": None,
+                "total_disparado": total_disparado, "base_cobranca": None, "quantidade_cobrada": None,
                 "custo_unitario": None, "custo": None,
             })
             continue
@@ -1897,6 +1900,7 @@ def calcular_custo_jornada_por_utm(
         quantidade_cobrada = quantidades[config["base"]]
         resultado.append({
             "total_disparado": total_disparado, "base_cobranca": config["base"],
+            "quantidade_cobrada": quantidade_cobrada,
             "custo_unitario": config["custo_unitario"], "custo": quantidade_cobrada * config["custo_unitario"],
         })
     return resultado

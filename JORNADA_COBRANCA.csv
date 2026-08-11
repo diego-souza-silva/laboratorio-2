@@ -1,11 +1,11 @@
 ﻿Data,Teste,Canal,Fornecedor,UTM(s),Descrição,Volume
-25/07/2026,Teste 1,SMS,Kolmeya,"20260725-abandonocarrinhodia25-kolmeya, 20260725-cadastradodia25-kolmeya, 20260725-engajadodia25-kolmeya, 20260725-topofunildia25-kolmeya","Planejado em 24/07. Disparo proporcional por grupo de propensão (P1 a P4), 2.000 clientes em cada.",8.000 (2.000 por P)
+25/07/2026,Teste 1,SMS,Kolmeya,"20260725-abandonocarrinhodia25-kolmeya, 20260725-cadastradodia25-kolmeya, 20260725-engajadodia25-kolmeya, 20260725-topofunildia25-kolmeya","Planejado em 24/07. Disparo proporcional por grupo de propensão (P1 a P4), 2.000 clientes em cada.",8.024
 27/07/2026,Teste 2,Email,Salesforce,20260727-CBtopofunildia27-salesforce,"Grupo Topo de Funil inteiro, disparo proporcional em 2 levas: 1ª leva com 9 clientes em cada P (P1 a P4); 2ª leva com 1.000 clientes em cada um de P2, P3 e P4.",3.036 (36 + 3.000)
-28/07/2026,Teste 3,WhatsApp,Ótima,20260728-CBlaboratorionowpp-otima,"Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima.",
-29/07/2026,Teste 3,WhatsApp,Airys,20260728-CBlaboratorionowpp-airys,"Mesma base dos testes de 25/07 e 27/07, a outra metade disparada via Airys.",
+28/07/2026,Teste 3,WhatsApp,Ótima,20260728-CBlaboratorionowpp-otima,"Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima.",3.807
+29/07/2026,Teste 3,WhatsApp,Airys,20260728-CBlaboratorionowpp-airys,"Mesma base dos testes de 25/07 e 27/07, a outra metade disparada via Airys.",3.804
 31/07/2026,Teste 4,Email,Salesforce,"20260730-CBabandonocarrinhodia30-salesforce, 20260730-CBcadastradodia30-salesforce, 20260730-CBengajadodia30-salesforce, 20260730-CBtopofunildia30-salesforce","Todos os grupos estratégicos, só origens de e-mail validadas (cadastro, engajado, log, válido). Disparo previsto pra 30/07, adiado pra 31/07 porque os links trackeados não funcionavam.",
-03/08/2026,Teste 5,SMS,Kolmeya,"20260803-abandonocarrinhodia03-kolmeya, 20260803-engajadodia03-kolmeya, 20260803-topofunildia03-kolmeya, 20260804-cadastradodia03-kolmeya","Disparo proporcional por grupo de propensão (P1 a P4) novamente, 2.000 clientes em cada.",8.000 (2.000 por P)
-04/08/2026,Teste 6,RCS,Ótima,20260804-CBtopofunildia4RCS-otima,Somente Topo de Funil.,8.374
-06/08/2026,Teste 7,SMS,Kolmeya,"20260806-CBabandonocarrinhodia06-kolmeya, 20260806-CBcadastradodia06-kolmeya, 20260806-CBengajadodia06-kolmeya, 20260806-CBtopofunildia06-kolmeya","Disparo proporcional por grupo de propensão (P1 a P4), 6.000 clientes em cada.",24.000 (6.000 por P)
-08/08/2026,Teste 8,SMS,Kolmeya,"20260808-CBabandonocarrinhodia08-kolmeya, 20260808-CBengajadodia08-kolmeya, 20260808-cadastradodia08-kolmeya","Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
-10/08/2026,Teste 9,SMS,Kolmeya,20260810-CBtopofunildia10-kolmeya,Somente Topo de Funil.,
+03/08/2026,Teste 5,SMS,Kolmeya,"20260803-abandonocarrinhodia03-kolmeya, 20260803-engajadodia03-kolmeya, 20260803-topofunildia03-kolmeya, 20260804-cadastradodia03-kolmeya","Disparo proporcional por grupo de propensão (P1 a P4) novamente, 2.000 clientes em cada.",8.026
+04/08/2026,Teste 6,RCS,Ótima,20260804-CBtopofunildia4RCS-otima,Somente Topo de Funil.,8.372
+06/08/2026,Teste 7,SMS,Kolmeya,"20260806-CBabandonocarrinhodia06-kolmeya, 20260806-CBcadastradodia06-kolmeya, 20260806-CBengajadodia06-kolmeya, 20260806-CBtopofunildia06-kolmeya","Disparo proporcional por grupo de propensão (P1 a P4), 6.000 clientes em cada.",18.356
+08/08/2026,Teste 8,SMS,Kolmeya,"20260808-CBabandonocarrinhodia08-kolmeya, 20260808-CBengajadodia08-kolmeya, 20260808-cadastradodia08-kolmeya","Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",8.186
+10/08/2026,Teste 9,SMS,Kolmeya,20260810-CBtopofunildia10-kolmeya,Somente Topo de Funil.,5.278
