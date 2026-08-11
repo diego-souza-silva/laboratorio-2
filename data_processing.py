@@ -1550,6 +1550,8 @@ def montar_pivot_crm(
     linhas = []
     totais_coluna = {u: 0 for u in utms_presentes}
     total_geral = 0
+    subtotal_anterior = None
+    total_por_grupo_anterior: dict = {}
 
     for etapa in ETAPAS_CRM:
         sub = df[df["acao_norm"] == etapa]
@@ -1569,9 +1571,13 @@ def montar_pivot_crm(
             linha_subtotal[u] = int(subtotal[u])
             totais_coluna[u] += int(subtotal[u])
         linha_subtotal["Total Geral"] = subtotal_geral
+        linha_subtotal["percentual"] = (
+            100.0 if subtotal_anterior is None else taxa(subtotal_geral, subtotal_anterior)
+        )
         total_geral += subtotal_geral
         linhas.append(linha_subtotal)
 
+        total_por_grupo_atual: dict = {}
         for grupo in sorted(pivot.index, key=ordem_grupo):
             linha = {"rotulo": grupo, "nivel": "detalhe"}
             total_linha = 0
@@ -1580,12 +1586,19 @@ def montar_pivot_crm(
                 linha[u] = valor
                 total_linha += valor
             linha["Total Geral"] = total_linha
+            base_grupo = total_por_grupo_anterior.get(grupo)
+            linha["percentual"] = 100.0 if base_grupo is None else taxa(total_linha, base_grupo)
+            total_por_grupo_atual[grupo] = total_linha
             linhas.append(linha)
+
+        subtotal_anterior = subtotal_geral
+        total_por_grupo_anterior = total_por_grupo_atual
 
     linha_total_geral = {"rotulo": "Total Geral", "nivel": "total_geral"}
     for u in utms_presentes:
         linha_total_geral[u] = totais_coluna[u]
     linha_total_geral["Total Geral"] = total_geral
+    linha_total_geral["percentual"] = None
     linhas.append(linha_total_geral)
 
     return utms_presentes, linhas

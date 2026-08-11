@@ -410,12 +410,10 @@ def grafico_taxa_entrega_frase(agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Taxa de Entrega por Frase (SMS)", altura=altura)
 
 
-def _valor_com_percentual(valor, base) -> str:
-    """Formata "quantidade (percentual)" — percentual em relação a `base` (a etapa
-    anterior); `base=None` mostra 100% (etapa inicial de uma sequência)."""
-    numero = formatar_numero(valor)
-    percentual = formatar_percentual(100.0 if base is None else taxa(valor, base))
-    return f"{numero} ({percentual})"
+def _percentual_etapa(valor, base) -> str:
+    """Percentual de `valor` em relação a `base` (a etapa anterior); `base=None` mostra
+    100% (etapa inicial de uma sequência) — coluna separada da quantidade."""
+    return formatar_percentual(100.0 if base is None else taxa(valor, base))
 
 
 def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
@@ -435,11 +433,15 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         }
         if tem_crm:
-            home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
-            registro["Home"] = _valor_com_percentual(home, linha["total_entregue"])
-            registro["Autenticação"] = _valor_com_percentual(auth, home)
-            registro["Oferta"] = _valor_com_percentual(oferta, auth)
-            registro["Acordo (resultado final)"] = _valor_com_percentual(linha["acordo"], oferta)
+            home, auth, oferta, acordo = linha["home"], linha["auth"], linha["oferta"], linha["acordo"]
+            registro["Home"] = formatar_numero(home)
+            registro["% Home"] = _percentual_etapa(home, linha["total_entregue"])
+            registro["Autenticação"] = formatar_numero(auth)
+            registro["% Autenticação"] = _percentual_etapa(auth, home)
+            registro["Oferta"] = formatar_numero(oferta)
+            registro["% Oferta"] = _percentual_etapa(oferta, auth)
+            registro["Acordo (resultado final)"] = formatar_numero(acordo)
+            registro["% Acordo"] = _percentual_etapa(acordo, oferta)
         registros.append(registro)
     return registros
 
@@ -534,12 +536,16 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         }
         if tem_crm:
-            home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
+            home, auth, oferta, acordo = linha["home"], linha["auth"], linha["oferta"], linha["acordo"]
             base_home = linha["Lido"] if linha["Lido"] else linha["Entregue"]
-            registro["Home"] = _valor_com_percentual(home, base_home)
-            registro["Autenticação"] = _valor_com_percentual(auth, home)
-            registro["Oferta"] = _valor_com_percentual(oferta, auth)
-            registro["Acordo (resultado final)"] = _valor_com_percentual(linha["acordo"], oferta)
+            registro["Home"] = formatar_numero(home)
+            registro["% Home"] = _percentual_etapa(home, base_home)
+            registro["Autenticação"] = formatar_numero(auth)
+            registro["% Autenticação"] = _percentual_etapa(auth, home)
+            registro["Oferta"] = formatar_numero(oferta)
+            registro["% Oferta"] = _percentual_etapa(oferta, auth)
+            registro["Acordo (resultado final)"] = formatar_numero(acordo)
+            registro["% Acordo"] = _percentual_etapa(acordo, oferta)
         registros.append(registro)
     return registros
 
@@ -699,13 +705,17 @@ def formatar_tabela_crm_grupo_ab(crm_agregado: pd.DataFrame) -> list[dict]:
     blocos por canal (SMS/WhatsApp Ótima/Airys/RCS) da aba Funil por Grupo AB."""
     registros = []
     for _, linha in crm_agregado.iterrows():
-        home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
+        home, auth, oferta, acordo = linha["home"], linha["auth"], linha["oferta"], linha["acordo"]
         registros.append({
             "Grupo AB": GRUPO_AB_LABEL.get(linha["grupo_ab"], linha["grupo_ab"]),
-            "Home": _valor_com_percentual(home, None),
-            "Autenticação": _valor_com_percentual(auth, home),
-            "Oferta": _valor_com_percentual(oferta, auth),
-            "Acordo": _valor_com_percentual(linha["acordo"], oferta),
+            "Home": formatar_numero(home),
+            "% Home": _percentual_etapa(home, None),
+            "Autenticação": formatar_numero(auth),
+            "% Autenticação": _percentual_etapa(auth, home),
+            "Oferta": formatar_numero(oferta),
+            "% Oferta": _percentual_etapa(oferta, auth),
+            "Acordo": formatar_numero(acordo),
+            "% Acordo": _percentual_etapa(acordo, oferta),
         })
     return registros
 
@@ -833,18 +843,18 @@ def formatar_tabela_custos(linhas: list[dict]) -> list[dict]:
     for linha in linhas:
         pct_quantidade = taxa(linha["quantidade"], total_quantidade_por_canal[linha["canal"]])
         custo_total = linha["custo_total"]
-        custo_formatado = (
-            f"{formatar_reais(custo_total)} ({formatar_percentual(taxa(custo_total, total_custo_geral))})"
-            if custo_total is not None else "Não informado"
-        )
         registros.append({
             "Data": linha["data"].strftime("%d/%m/%Y") if linha["data"] else "Período completo (sem data por envio)",
             "Canal": CANAL_CUSTO_LABEL.get(linha["canal"], linha["canal"]),
             "Fornecedor": FORNECEDOR_CUSTO_LABEL.get(linha["fornecedor"], linha["fornecedor"]),
             "Base de Cobrança": BASE_COBRANCA_LABEL.get(linha["base_cobranca"], linha["base_cobranca"]),
-            "Quantidade": f"{formatar_numero(linha['quantidade'])} ({formatar_percentual(pct_quantidade)})",
+            "Quantidade": formatar_numero(linha["quantidade"]),
+            "% Quantidade": formatar_percentual(pct_quantidade),
             "Custo Unitário": formatar_reais(linha["custo_unitario"], casas=4),
-            "Custo Total": custo_formatado,
+            "Custo Total": formatar_reais(custo_total),
+            "% Custo Total": (
+                formatar_percentual(taxa(custo_total, total_custo_geral)) if custo_total is not None else "—"
+            ),
         })
     return registros
 

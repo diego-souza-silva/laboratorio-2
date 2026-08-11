@@ -75,17 +75,20 @@ COLUNAS_TABELA_WHATSAPP_GRUPO_ESTRATEGICO = [
 COLUNAS_TABELA_FRASE = [
     "Frase (modelo)", "Campanha(s)", "Total Disparado", "Total Enviado", "Total Entregue",
     "Total Falhado", "Taxa de Envio", "Taxa de Entrega", "Taxa de Falha",
-    "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
+    "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta",
+    "Acordo (resultado final)", "% Acordo",
 ]
 
 COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
     "Mensagem (modelo)", "Total", "Entregue (não lido)", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
-    "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
+    "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta",
+    "Acordo (resultado final)", "% Acordo",
 ]
 
 COLUNAS_TABELA_CUSTOS = [
-    "Data", "Canal", "Fornecedor", "Base de Cobrança", "Quantidade", "Custo Unitário", "Custo Total",
+    "Data", "Canal", "Fornecedor", "Base de Cobrança", "Quantidade", "% Quantidade",
+    "Custo Unitário", "Custo Total", "% Custo Total",
 ]
 
 COLUNAS_TABELA_JORNADA_CUSTO = [
@@ -147,7 +150,7 @@ def _tabela_pivot_crm_component(
     colunas = (
         [{"name": titulo_coluna, "id": "rotulo"}]
         + [{"name": charts.nome_curto(u), "id": u} for u in colunas_utm]
-        + [{"name": "Total Geral", "id": "Total Geral"}]
+        + [{"name": "Total Geral", "id": "Total Geral"}, {"name": "% Etapa Anterior", "id": "percentual"}]
     )
 
     registros = []
@@ -166,6 +169,8 @@ def _tabela_pivot_crm_component(
         for u in colunas_utm:
             registro[u] = formatar_numero(linha.get(u, 0))
         registro["Total Geral"] = formatar_numero(linha["Total Geral"])
+        percentual = linha.get("percentual")
+        registro["percentual"] = formatar_percentual(percentual) if percentual is not None else "—"
         registros.append(registro)
 
     style_data_conditional = [{"if": {"row_index": "odd"}, "backgroundColor": "#121722"}]
@@ -256,13 +261,11 @@ def _tabela_grupo_estrategico_ab_component(linhas: list[dict]):
     )
 
 
-def _valor_com_percentual_etapa(valor: int, anterior: int | None) -> str:
-    """Formata "quantidade (percentual)" — percentual é a conversão em relação à etapa
-    anterior da mesma linha (Home é a etapa-base, sempre 100%), consistente com a
-    lógica de funil etapa-a-etapa usada na aba Conversão Pós-Contato."""
-    numero = formatar_numero(valor)
-    percentual = formatar_percentual(100.0 if anterior is None else taxa(valor, anterior))
-    return f"{numero} ({percentual})"
+def _percentual_etapa(valor: int, anterior: int | None) -> str:
+    """Percentual de `valor` em relação à etapa anterior da mesma linha (Home é a
+    etapa-base, sempre 100%), consistente com a lógica de funil etapa-a-etapa usada na
+    aba Conversão Pós-Contato — coluna separada da quantidade."""
+    return formatar_percentual(100.0 if anterior is None else taxa(valor, anterior))
 
 
 def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_coluna: str):
@@ -272,9 +275,13 @@ def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_c
     colunas = [
         {"name": titulo_coluna, "id": "rotulo"},
         {"name": "Home", "id": "Home"},
+        {"name": "% Home", "id": "% Home"},
         {"name": "Autenticação", "id": "Autenticação"},
+        {"name": "% Autenticação", "id": "% Autenticação"},
         {"name": "Oferta", "id": "Oferta"},
+        {"name": "% Oferta", "id": "% Oferta"},
         {"name": "Acordo (resultado final)", "id": "Acordo (resultado final)"},
+        {"name": "% Acordo", "id": "% Acordo"},
     ]
 
     registros = []
@@ -290,10 +297,14 @@ def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_c
         home, auth, oferta, acordo = linha["home"], linha["auth"], linha["oferta"], linha["acordo"]
         registros.append({
             "rotulo": rotulo,
-            "Home": _valor_com_percentual_etapa(home, None),
-            "Autenticação": _valor_com_percentual_etapa(auth, home),
-            "Oferta": _valor_com_percentual_etapa(oferta, auth),
-            "Acordo (resultado final)": _valor_com_percentual_etapa(acordo, oferta),
+            "Home": formatar_numero(home),
+            "% Home": _percentual_etapa(home, None),
+            "Autenticação": formatar_numero(auth),
+            "% Autenticação": _percentual_etapa(auth, home),
+            "Oferta": formatar_numero(oferta),
+            "% Oferta": _percentual_etapa(oferta, auth),
+            "Acordo (resultado final)": formatar_numero(acordo),
+            "% Acordo": _percentual_etapa(acordo, oferta),
         })
 
     style_data_conditional = [{"if": {"row_index": "odd"}, "backgroundColor": "#121722"}]
@@ -1068,19 +1079,19 @@ def registrar_callbacks(app):
             _tabela_component(charts.formatar_tabela_custos(linhas_custo), COLUNAS_TABELA_CUSTOS),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_sms),
-                ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
+                ["Grupo AB", "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta", "Acordo", "% Acordo"],
             ),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_otima),
-                ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
+                ["Grupo AB", "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta", "Acordo", "% Acordo"],
             ),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_airys),
-                ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
+                ["Grupo AB", "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta", "Acordo", "% Acordo"],
             ),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_rcs),
-                ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
+                ["Grupo AB", "Home", "% Home", "Autenticação", "% Autenticação", "Oferta", "% Oferta", "Acordo", "% Acordo"],
             ),
             formatar_percentual(taxa_entrega_crm),
             formatar_percentual(home_vs_etapa_valor),
