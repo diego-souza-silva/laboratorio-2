@@ -7,7 +7,8 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from data_processing import (
-    ETAPAS_CRM, ETAPAS_CRM_LABEL, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
+    CANAL_CUSTO_LABEL, ETAPAS_CRM, ETAPAS_CRM_LABEL, FORNECEDOR_CUSTO_LABEL, GRUPO_AB_ORDEM,
+    GRUPO_ESTRATEGICO_ORDEM, SITUACOES_WHATSAPP,
 )
 from utils import formatar_numero, formatar_percentual, taxa
 
@@ -409,6 +410,14 @@ def grafico_taxa_entrega_frase(agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Taxa de Entrega por Frase (SMS)", altura=altura)
 
 
+def _valor_com_percentual(valor, base) -> str:
+    """Formata "quantidade (percentual)" — percentual em relação a `base` (a etapa
+    anterior); `base=None` mostra 100% (etapa inicial de uma sequência)."""
+    numero = formatar_numero(valor)
+    percentual = formatar_percentual(100.0 if base is None else taxa(valor, base))
+    return f"{numero} ({percentual})"
+
+
 def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
     tem_crm = "acordo" in agregado.columns
     registros = []
@@ -426,10 +435,11 @@ def formatar_tabela_frase(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         }
         if tem_crm:
-            registro["Home"] = formatar_numero(linha["home"])
-            registro["Autenticação"] = formatar_numero(linha["auth"])
-            registro["Oferta"] = formatar_numero(linha["oferta"])
-            registro["Acordo (resultado final)"] = formatar_numero(linha["acordo"])
+            home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
+            registro["Home"] = _valor_com_percentual(home, linha["total_entregue"])
+            registro["Autenticação"] = _valor_com_percentual(auth, home)
+            registro["Oferta"] = _valor_com_percentual(oferta, auth)
+            registro["Acordo (resultado final)"] = _valor_com_percentual(linha["acordo"], oferta)
         registros.append(registro)
     return registros
 
@@ -524,10 +534,12 @@ def formatar_tabela_mensagem_whatsapp(agregado: pd.DataFrame) -> list[dict]:
             "Taxa de Falha": formatar_percentual(linha["taxa_falha"]),
         }
         if tem_crm:
-            registro["Home"] = formatar_numero(linha["home"])
-            registro["Autenticação"] = formatar_numero(linha["auth"])
-            registro["Oferta"] = formatar_numero(linha["oferta"])
-            registro["Acordo (resultado final)"] = formatar_numero(linha["acordo"])
+            home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
+            base_home = linha["Lido"] if linha["Lido"] else linha["Entregue"]
+            registro["Home"] = _valor_com_percentual(home, base_home)
+            registro["Autenticação"] = _valor_com_percentual(auth, home)
+            registro["Oferta"] = _valor_com_percentual(oferta, auth)
+            registro["Acordo (resultado final)"] = _valor_com_percentual(linha["acordo"], oferta)
         registros.append(registro)
     return registros
 
@@ -687,12 +699,13 @@ def formatar_tabela_crm_grupo_ab(crm_agregado: pd.DataFrame) -> list[dict]:
     blocos por canal (SMS/WhatsApp Ótima/Airys/RCS) da aba Funil por Grupo AB."""
     registros = []
     for _, linha in crm_agregado.iterrows():
+        home, auth, oferta = linha["home"], linha["auth"], linha["oferta"]
         registros.append({
             "Grupo AB": GRUPO_AB_LABEL.get(linha["grupo_ab"], linha["grupo_ab"]),
-            "Home": formatar_numero(linha["home"]),
-            "Autenticação": formatar_numero(linha["auth"]),
-            "Oferta": formatar_numero(linha["oferta"]),
-            "Acordo": formatar_numero(linha["acordo"]),
+            "Home": _valor_com_percentual(home, None),
+            "Autenticação": _valor_com_percentual(auth, home),
+            "Oferta": _valor_com_percentual(oferta, auth),
+            "Acordo": _valor_com_percentual(linha["acordo"], oferta),
         })
     return registros
 
@@ -790,3 +803,46 @@ def formatar_tabela_email_salesforce(df: pd.DataFrame) -> list[dict]:
             "Eficiência": f"{linha['Eficiência']:.3f}%".replace(".", ","),
         })
     return registros
+
+
+def formatar_reais(valor: float | None, casas: int = 2) -> str:
+    if valor is None:
+        return "Não informado"
+    texto = f"{valor:,.{casas}f}"
+    texto = texto.replace(",", "§").replace(".", ",").replace("§", ".")
+    return f"R$ {texto}"
+
+
+def formatar_tabela_custos(linhas: list[dict]) -> list[dict]:
+    registros = []
+    for linha in linhas:
+        registros.append({
+            "Data": linha["data"].strftime("%d/%m/%Y") if linha["data"] else "Período completo (sem data por envio)",
+            "Canal": CANAL_CUSTO_LABEL.get(linha["canal"], linha["canal"]),
+            "Fornecedor": FORNECEDOR_CUSTO_LABEL.get(linha["fornecedor"], linha["fornecedor"]),
+            "Quantidade Enviada": formatar_numero(linha["quantidade_enviada"]),
+            "Custo Unitário": formatar_reais(linha["custo_unitario"], casas=4),
+            "Custo Total": formatar_reais(linha["custo_total"]),
+        })
+    return registros
+
+
+def grafico_custos_por_dia(linhas: list[dict]) -> go.Figure:
+    """Custo total por dia, empilhado por canal — só entram linhas com custo unitário
+    definido (SMS/RCS hoje); WhatsApp e Email aparecem só na tabela, com o volume."""
+    com_custo = [l for l in linhas if l["custo_total"] is not None and l["data"] is not None]
+    if not com_custo:
+        return _layout_base(go.Figure(), "Custo por Dia e Canal (sem custo definido no período)")
+
+    df = pd.DataFrame(com_custo)
+    cores_canal = {"sms": CORES["disparado"], "rcs": CORES["entregue"], "whatsapp": CORES["enviado"]}
+    fig = go.Figure()
+    for canal in df["canal"].unique():
+        sub = df[df["canal"] == canal].groupby("data")["custo_total"].sum().sort_index()
+        fig.add_trace(go.Bar(
+            x=sub.index, y=sub.values, name=CANAL_CUSTO_LABEL.get(canal, canal),
+            marker_color=cores_canal.get(canal, "#8B93B8"),
+            hovertemplate="%{x|%d/%m}<br>R$ %{y:,.2f}<extra></extra>",
+        ))
+    fig.update_layout(barmode="stack")
+    return _layout_base(fig, "Custo por Dia e Canal")

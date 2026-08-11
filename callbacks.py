@@ -12,7 +12,8 @@ from data_processing import (
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_funil, calcular_funil_combinado_email_salesforce,
+    agregar_whatsapp_por_grupo_estrategico, calcular_custos_disparo, calcular_funil,
+    calcular_funil_combinado_email_salesforce,
     calcular_funil_combinado_sms, calcular_funil_combinado_whatsapp, calcular_funil_whatsapp,
     calcular_kpis, calcular_kpis_email_salesforce, calcular_kpis_resposta_airys,
     calcular_kpis_whatsapp, canal_da_campanha, carregar_dados_airys, carregar_dados_crm,
@@ -77,6 +78,10 @@ COLUNAS_TABELA_MENSAGEM_WHATSAPP = [
     "Mensagem (modelo)", "Total", "Entregue (não lido)", "Lido", "Pendente", "Não Entregue", "Não Enviado",
     "Taxa de Entrega", "Taxa de Leitura", "Taxa de Falha",
     "Home", "Autenticação", "Oferta", "Acordo (resultado final)",
+]
+
+COLUNAS_TABELA_CUSTOS = [
+    "Data", "Canal", "Fornecedor", "Quantidade Enviada", "Custo Unitário", "Custo Total",
 ]
 
 
@@ -307,7 +312,7 @@ def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_c
 
 
 def registrar_callbacks(app):
-    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "diario"]
+    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "custos", "diario", "documentacao"]
 
     @app.callback(
         [Output(f"painel-tab-{aba}", "style") for aba in ABAS],
@@ -346,6 +351,7 @@ def registrar_callbacks(app):
         Output("secao-mensagem-rcs", "style"),
         Output("bloco-funil-crm-airys", "style"),
         Output("alerta-funil-crm-email", "style"),
+        Output("col-kpi-home-vs-lido-airys", "style"),
         Input("btn-canal-sms", "n_clicks"),
         Input("btn-canal-whatsapp", "n_clicks"),
         Input("btn-canal-rcs", "n_clicks"),
@@ -354,13 +360,17 @@ def registrar_callbacks(app):
     def alternar_canal_crm(_n_sms, _n_whatsapp, _n_rcs, _n_email):
         inativo, ativo = "aba-botao", "aba-botao aba-ativa"
         oculto, visivel = {"display": "none"}, {"display": "block"}
+        oculto_col, visivel_col = {"display": "none"}, {}
         if ctx.triggered_id == "btn-canal-whatsapp":
-            return "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto, visivel, oculto
+            return (
+                "whatsapp", inativo, ativo, inativo, inativo, oculto, visivel, oculto, visivel, oculto,
+                visivel_col,
+            )
         if ctx.triggered_id == "btn-canal-rcs":
-            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel, oculto, oculto
+            return "rcs", inativo, inativo, ativo, inativo, oculto, oculto, visivel, oculto, oculto, oculto_col
         if ctx.triggered_id == "btn-canal-email":
-            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto, oculto, visivel
-        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto, oculto, oculto
+            return "email", inativo, inativo, inativo, ativo, oculto, oculto, oculto, oculto, visivel, oculto_col
+        return "sms", ativo, inativo, inativo, inativo, visivel, oculto, oculto, oculto, oculto, oculto_col
 
     @app.callback(
         Output("kpi-disparado", "children"),
@@ -467,6 +477,10 @@ def registrar_callbacks(app):
         Output("tabela-crm-pivot-container", "children"),
         Output("tabela-crm-pivot-estrategico-container", "children"),
         Output("kpi-clientes-unicos", "children"),
+        Output("kpi-spin", "children"),
+        Output("kpi-custo-total", "children"),
+        Output("grafico-custos-dia", "figure"),
+        Output("tabela-custos-container", "children"),
         Output("tabela-crm-grupo-ab-sms-container", "children"),
         Output("tabela-crm-grupo-ab-whatsapp-container", "children"),
         Output("tabela-crm-grupo-ab-airys-container", "children"),
@@ -474,6 +488,7 @@ def registrar_callbacks(app):
         Output("kpi-crm-taxa-entrega", "children"),
         Output("kpi-crm-home-vs-etapa", "children"),
         Output("kpi-crm-home-vs-etapa-titulo", "children"),
+        Output("kpi-crm-home-vs-lido-airys", "children"),
         Input("filtro-utm", "value"),
         Input("filtro-data", "start_date"),
         Input("filtro-data", "end_date"),
@@ -623,6 +638,7 @@ def registrar_callbacks(app):
         # aba CRM (utms_crm) — não a campanha do filtro global do Funil Geral.
         titulo_funil_crm = f"Funil de Conversão {CANAL_LABEL_FUNIL.get(canal_crm, 'Pós-Contato')}"
         grafico_funil_crm_airys = charts.grafico_funil_crm(pd.DataFrame(), "Airys")
+        home_vs_lido_airys_valor = 0.0
         if canal_crm == "sms":
             filtrado_crm_sms = filtrar_dados(
                 df_completo, utms=utms_crm, data_ini=data_ini_dt, data_fim=data_fim_dt,
@@ -699,9 +715,12 @@ def registrar_callbacks(app):
             )
             entregue_crm_total = entregue_otima + entregue_airys
             taxa_entrega_crm = taxa(entregue_crm_total, enviado_otima + enviado_airys)
-            lido_crm_total = kpis_whatsapp_otima_crm["Lido"] + kpis_whatsapp_airys_crm["Lido"]
-            home_vs_etapa_titulo = "Home vs Lido"
-            home_vs_etapa_valor = taxa(totais_crm["home"], lido_crm_total)
+            # Cada fornecedor tem seu próprio Home (totais_crm_otima/airys, já separados
+            # acima pros dois funis) e seu próprio Lido — mostrados como dois KPIs
+            # distintos, não mais um "Home vs Lido" combinado que misturava fornecedor.
+            home_vs_etapa_titulo = "Home vs Lido — Ótima"
+            home_vs_etapa_valor = taxa(totais_crm_otima["home"], kpis_whatsapp_otima_crm["Lido"])
+            home_vs_lido_airys_valor = taxa(totais_crm_airys["home"], kpis_whatsapp_airys_crm["Lido"])
         elif canal_crm == "rcs":
             # O retorno de RCS segue o mesmo formato Otima-schema do WhatsApp Ótima (ver
             # `_carregar_retorno_estilo_otima`), então também distingue "Lido" de
@@ -760,6 +779,18 @@ def registrar_callbacks(app):
             ],
             ignore_index=True,
         ).nunique()
+
+        # SPIN: quantas vezes, em média, a base de clientes únicos foi "rodada" —
+        # total de disparos (cada linha nos dataframes já filtrados é um disparo,
+        # mesmo cliente pode aparecer em várias) dividido pelos clientes únicos acima.
+        total_disparos = len(filtrado) + len(whatsapp_filtrado) + len(airys_filtrado) + len(rcs_sms_filtrado)
+        spin = (total_disparos / clientes_unicos_disparados) if clientes_unicos_disparados else 0.0
+
+        linhas_custo = calcular_custos_disparo(
+            filtrado, rcs_sms_filtrado, whatsapp_filtrado, airys_filtrado,
+            _KPIS_EMAIL_SALESFORCE["envios"],
+        )
+        custo_total_periodo = sum(l["custo_total"] for l in linhas_custo if l["custo_total"] is not None)
 
         # Funil de negociação (Home/Autenticação/Oferta/Acordo) por Grupo AB, um por
         # canal, na aba Funil por Grupo AB — usa os filtros globais (utms/grupos_ab/
@@ -956,6 +987,10 @@ def registrar_callbacks(app):
                 titulo_coluna="Ação / Grupo Estratégico", mapa_label=charts.GRUPO_ESTRATEGICO_LABEL,
             ),
             formatar_numero(clientes_unicos_disparados),
+            f"{spin:.2f}".replace(".", ","),
+            charts.formatar_reais(custo_total_periodo if linhas_custo else None),
+            charts.grafico_custos_por_dia(linhas_custo),
+            _tabela_component(charts.formatar_tabela_custos(linhas_custo), COLUNAS_TABELA_CUSTOS),
             _tabela_component(
                 charts.formatar_tabela_crm_grupo_ab(crm_grupo_ab_sms),
                 ["Grupo AB", "Home", "Autenticação", "Oferta", "Acordo"],
@@ -975,4 +1010,5 @@ def registrar_callbacks(app):
             formatar_percentual(taxa_entrega_crm),
             formatar_percentual(home_vs_etapa_valor),
             home_vs_etapa_titulo,
+            formatar_percentual(home_vs_lido_airys_valor),
         )

@@ -1613,3 +1613,89 @@ def ler_diario_estrategia() -> str:
 def salvar_diario_estrategia(conteudo: str) -> None:
     """Grava o texto editado na aba do dashboard de volta em DIARIO_ESTRATEGIA.md."""
     ARQUIVO_DIARIO_ESTRATEGIA.write_text(conteudo or "", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Custos de disparo
+# ---------------------------------------------------------------------------
+# Custo unitário por (canal, fornecedor) — só os que têm valor confirmado pelo
+# negócio. Ausente do dict = custo não informado (ex.: WhatsApp Ótima/Airys,
+# Email/Salesforce, que roda sobre um saldo pré-pago em vez de custo por envio) —
+# nesse caso NÃO se estima nem se inventa um valor, fica marcado como tal na tela.
+CUSTO_UNITARIO_POR_CANAL_FORNECEDOR = {
+    ("sms", "kolmeya"): 0.0620,
+    ("sms", "otima"): 0.0500,
+    ("rcs", "otima"): 0.0900,
+}
+
+CANAL_CUSTO_LABEL = {"sms": "SMS", "rcs": "RCS", "whatsapp": "WhatsApp", "email": "Email"}
+FORNECEDOR_CUSTO_LABEL = {
+    "kolmeya": "Kolmeya", "otima": "Ótima", "airys": "Airys", "salesforce": "Salesforce",
+}
+
+
+def _linhas_custo_por_dia_evento(df: pd.DataFrame, canal: str) -> list[dict]:
+    """Quantidade enviada por dia e fornecedor, a partir de um df já filtrado e restrito
+    a um canal cujo "enviado" é a flag 0/1 (SMS/RCS, formato estilo SMS)."""
+    if df.empty:
+        return []
+    d = df.copy()
+    d["fornecedor"] = d["utm_campaign"].apply(fornecedor_da_campanha)
+    agrupado = d.groupby(["data", "fornecedor"])["enviado"].sum()
+    return _montar_linhas_custo(agrupado, canal)
+
+
+def _linhas_custo_por_dia_status(df: pd.DataFrame, canal: str, fornecedor: str) -> list[dict]:
+    """Igual `_linhas_custo_por_dia_evento`, mas pro formato de retorno com granularidade
+    por destinatário (WhatsApp/Airys) — aqui "enviado" é qualquer status diferente de
+    "Não Enviado" (mesma regra usada em `calcular_funil_whatsapp`). Esses dataframes não
+    têm coluna `utm_campaign` (só a WhatsApp/Airys, com "campanha"/"campaign_titulo" no
+    formato bruto do retorno), então o fornecedor vem fixo por chamada — cada df já é
+    de um fornecedor só (whatsapp_completo é só Ótima, airys_completo é só Airys)."""
+    if df.empty:
+        return []
+    d = df.copy()
+    d["fornecedor"] = fornecedor
+    d["_enviado"] = (d["situacao_norm"] != "Nao Enviado").astype(int)
+    agrupado = d.groupby(["data", "fornecedor"])["_enviado"].sum()
+    return _montar_linhas_custo(agrupado, canal)
+
+
+def _montar_linhas_custo(agrupado: pd.Series, canal: str) -> list[dict]:
+    linhas = []
+    for (data, fornecedor), quantidade in agrupado.items():
+        quantidade = int(quantidade)
+        if quantidade <= 0:
+            continue
+        custo_unitario = CUSTO_UNITARIO_POR_CANAL_FORNECEDOR.get((canal, fornecedor))
+        linhas.append({
+            "data": data, "canal": canal, "fornecedor": fornecedor, "quantidade_enviada": quantidade,
+            "custo_unitario": custo_unitario,
+            "custo_total": (quantidade * custo_unitario) if custo_unitario is not None else None,
+        })
+    return linhas
+
+
+def calcular_custos_disparo(
+    df_sms: pd.DataFrame, df_rcs: pd.DataFrame, df_whatsapp_otima: pd.DataFrame,
+    df_whatsapp_airys: pd.DataFrame, envios_email: int,
+) -> list[dict]:
+    """Monta a tabela de custo por dia/canal/fornecedor — CUSTO = quantidade ENVIADA ×
+    custo unitário do fornecedor (nunca entregue/lido/respondido/clique/acordo). Cada
+    df já deve vir filtrado pelos filtros globais do dashboard (mesma regra de
+    "quantidade enviada" já usada no resto do app: flag `enviado` pro SMS/RCS estilo
+    SMS, status != "Não Enviado" pro WhatsApp/RCS estilo Otima). O e-mail (Salesforce)
+    entra como uma única linha sem data, já que o relatório não tem granularidade por
+    dia/destinatário — ver `carregar_dados_email_salesforce`."""
+    linhas = []
+    linhas += _linhas_custo_por_dia_evento(df_sms, "sms")
+    linhas += _linhas_custo_por_dia_evento(df_rcs, "rcs")
+    linhas += _linhas_custo_por_dia_status(df_whatsapp_otima, "whatsapp", "otima")
+    linhas += _linhas_custo_por_dia_status(df_whatsapp_airys, "whatsapp", "airys")
+    if envios_email:
+        linhas.append({
+            "data": None, "canal": "email", "fornecedor": "salesforce",
+            "quantidade_enviada": int(envios_email), "custo_unitario": None, "custo_total": None,
+        })
+    linhas.sort(key=lambda l: (l["data"] is None, l["data"], l["canal"], l["fornecedor"]))
+    return linhas
