@@ -3,5 +3,6 @@ __pycache__/
 .venv/
 
 # Acima do limite de 100MB do GitHub por arquivo — fica só local/no zip entregue,
-# nunca vai caber no git (ver commit que remove ela do tracking).
-ARQUIVO DA BASE INTEIRA/base_segmentacao_grupo_ab.csv
+# nunca vai caber no git (ver commit que remove ela do tracking). Casa por qualquer
+# carteira (CARTEIRAS/<nome>/ARQUIVO DA BASE INTEIRA/...).
+**/ARQUIVO DA BASE INTEIRA/base_segmentacao_grupo_ab.csv

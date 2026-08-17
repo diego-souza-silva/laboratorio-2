@@ -5,9 +5,9 @@ from dash import dash_table, dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CAMPANHAS_ESCOPO, COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
+    CARTEIRA_PADRAO, CARTEIRAS, COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
     STATUS_FUNIL_ORDEM, agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
-    calcular_kpis_email_salesforce, carregar_dados_airys, carregar_dados_email_salesforce,
+    calcular_kpis_email_salesforce, campanhas_escopo, carregar_dados_airys, carregar_dados_email_salesforce,
     carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
     carregar_jornada_cobranca, extremos_data_hora, ler_diario_estrategia,
 )
@@ -155,9 +155,11 @@ def _linha_kpis() -> html.Div:
 
 
 def _painel_filtros() -> dbc.Card:
-    df = carregar_dados_sms()
+    campanhas = campanhas_escopo(CARTEIRA_PADRAO)
+    df = carregar_dados_sms(CARTEIRA_PADRAO)
     data_min, data_max, hora_min, hora_max = extremos_data_hora(
-        df, carregar_dados_whatsapp_mensagem(), carregar_dados_airys(), carregar_dados_rcs(),
+        df, carregar_dados_whatsapp_mensagem(CARTEIRA_PADRAO), carregar_dados_airys(CARTEIRA_PADRAO),
+        carregar_dados_rcs(CARTEIRA_PADRAO),
     )
 
     return dbc.Card(
@@ -167,8 +169,8 @@ def _painel_filtros() -> dbc.Card:
                     html.Label("Campanha (UTM)", className="rotulo-filtro"),
                     dcc.Dropdown(
                         id="filtro-utm",
-                        options=[{"label": nome_curto(u), "value": u} for u in CAMPANHAS_ESCOPO],
-                        value=CAMPANHAS_ESCOPO, multi=True, placeholder="Todas as campanhas",
+                        options=[{"label": nome_curto(u), "value": u} for u in campanhas],
+                        value=campanhas, multi=True, placeholder="Todas as campanhas",
                         className="dash-dropdown-escuro",
                     ),
                 ], md=4),
@@ -201,7 +203,7 @@ def _painel_filtros() -> dbc.Card:
             ], className="g-3 align-items-end"),
             dbc.Row([
                 dbc.Col([
-                    html.Label("Grupo AB (segmentação de propensão)", className="rotulo-filtro"),
+                    html.Label("Prioridade (segmentação de propensão)", className="rotulo-filtro"),
                     dcc.Dropdown(
                         id="filtro-grupo-ab",
                         options=[{"label": GRUPO_AB_LABEL.get(g, g), "value": g} for g in GRUPO_AB_ORDEM],
@@ -337,16 +339,17 @@ def _aba_funil_sms() -> html.Div:
             className="cartao-grafico shadow-sm mb-4",
         ),
 
-        _bloco_email_salesforce(),
+        html.Div(bloco_email_salesforce(CARTEIRA_PADRAO), id="bloco-email-salesforce-container"),
     ])
 
 
-def _bloco_email_salesforce() -> html.Div:
-    """Bloco de e-mail (Salesforce Journey Builder) na aba Funil Geral. Diferente dos
-    outros blocos, o conteúdo é calculado uma vez aqui (não via callback): o export vem
-    já agregado pela própria plataforma, sem telefone/timestamp por destinatário, então
-    não tem como responder aos filtros globais de campanha/data/hora/grupo_ab."""
-    df = carregar_dados_email_salesforce()
+def bloco_email_salesforce(carteira: str) -> html.Div:
+    """Bloco de e-mail (Salesforce Journey Builder) na aba Funil Geral, por carteira.
+    Diferente dos outros blocos, o conteúdo não responde aos filtros globais de
+    campanha/data/hora/grupo_ab (o export vem já agregado por e-mail/dia pela própria
+    plataforma, sem telefone/timestamp por destinatário) — só à carteira selecionada,
+    recalculado sob demanda (na troca de carteira) em vez de a cada filtro."""
+    df = carregar_dados_email_salesforce(carteira)
     kpis = calcular_kpis_email_salesforce(df)
     etapas = calcular_funil_email_salesforce(kpis)
     agregado_jornada = agregar_email_salesforce_por_jornada(df)
@@ -449,21 +452,21 @@ def _aba_grupo_ab() -> html.Div:
         ),
         html.Span("SMS (Kolmeya)", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Volume por Grupo AB", "grafico-volume-grupo-ab", altura="1500px"), md=12),
+            dbc.Col(_grafico_card("Volume por Prioridade", "grafico-volume-grupo-ab", altura="1500px"), md=12),
         ], className="g-3 mb-3"),
         dbc.Row([
-            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB", "grafico-taxa-entrega-grupo-ab"), md=12),
+            dbc.Col(_grafico_card("Taxa de Entrega por Prioridade", "grafico-taxa-entrega-grupo-ab"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva por Grupo AB", className="mb-3"),
+                html.H6("Tabela Executiva por Prioridade", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (SMS)", className="mb-3"),
+                html.H6("Home / Autenticação / Oferta / Acordo por Prioridade (SMS)", className="mb-3"),
                 html.Div(id="tabela-crm-grupo-ab-sms-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
@@ -471,18 +474,18 @@ def _aba_grupo_ab() -> html.Div:
 
         html.Span("WhatsApp — Ótima", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB (Ótima)", "grafico-whatsapp-grupo-ab"), md=12),
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Prioridade (Ótima)", "grafico-whatsapp-grupo-ab"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva de WhatsApp por Grupo AB (Ótima)", className="mb-3"),
+                html.H6("Tabela Executiva de WhatsApp por Prioridade (Ótima)", className="mb-3"),
                 html.Div(id="tabela-whatsapp-grupo-ab-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Ótima)", className="mb-3"),
+                html.H6("Home / Autenticação / Oferta / Acordo por Prioridade (WhatsApp Ótima)", className="mb-3"),
                 html.Div(id="tabela-crm-grupo-ab-whatsapp-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
@@ -490,18 +493,18 @@ def _aba_grupo_ab() -> html.Div:
 
         html.Span("WhatsApp — Airys", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Resultado de WhatsApp por Grupo AB (Airys)", "grafico-airys-grupo-ab"), md=12),
+            dbc.Col(_grafico_card("Resultado de WhatsApp por Prioridade (Airys)", "grafico-airys-grupo-ab"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva de WhatsApp por Grupo AB (Airys)", className="mb-3"),
+                html.H6("Tabela Executiva de WhatsApp por Prioridade (Airys)", className="mb-3"),
                 html.Div(id="tabela-airys-grupo-ab-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (WhatsApp Airys)", className="mb-3"),
+                html.H6("Home / Autenticação / Oferta / Acordo por Prioridade (WhatsApp Airys)", className="mb-3"),
                 html.Div(id="tabela-crm-grupo-ab-airys-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
@@ -509,21 +512,21 @@ def _aba_grupo_ab() -> html.Div:
 
         html.Span("RCS (Ótima)", className="rotulo-filtro"),
         dbc.Row([
-            dbc.Col(_grafico_card("Volume por Grupo AB (RCS)", "grafico-volume-grupo-ab-rcs", altura="1500px"), md=12),
+            dbc.Col(_grafico_card("Volume por Prioridade (RCS)", "grafico-volume-grupo-ab-rcs", altura="1500px"), md=12),
         ], className="g-3 mb-3"),
         dbc.Row([
-            dbc.Col(_grafico_card("Taxa de Entrega por Grupo AB (RCS)", "grafico-taxa-entrega-grupo-ab-rcs"), md=12),
+            dbc.Col(_grafico_card("Taxa de Entrega por Prioridade (RCS)", "grafico-taxa-entrega-grupo-ab-rcs"), md=12),
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Tabela Executiva por Grupo AB (RCS)", className="mb-3"),
+                html.H6("Tabela Executiva por Prioridade (RCS)", className="mb-3"),
                 html.Div(id="tabela-grupo-ab-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
         ),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Home / Autenticação / Oferta / Acordo por Grupo AB (RCS)", className="mb-3"),
+                html.H6("Home / Autenticação / Oferta / Acordo por Prioridade (RCS)", className="mb-3"),
                 html.Div(id="tabela-crm-grupo-ab-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
@@ -550,7 +553,7 @@ def _aba_grupo_estrategico() -> html.Div:
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Grupo Estratégico × Grupo AB (detalhado)", className="mb-3"),
+                html.H6("Grupo Estratégico × Prioridade (detalhado)", className="mb-3"),
                 html.Div(id="tabela-grupo-estrategico-container"),
             ]),
             className="cartao-grafico shadow-sm mb-4",
@@ -596,7 +599,7 @@ def _aba_grupo_estrategico() -> html.Div:
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Grupo Estratégico × Grupo AB (RCS, detalhado)", className="mb-3"),
+                html.H6("Grupo Estratégico × Prioridade (RCS, detalhado)", className="mb-3"),
                 html.Div(id="tabela-grupo-estrategico-rcs-container"),
             ]),
             className="cartao-grafico shadow-sm",
@@ -644,8 +647,8 @@ def _aba_conversao_crm() -> html.Div:
                         html.Label("Campanha (UTM) — CRM", className="rotulo-filtro"),
                         dcc.Dropdown(
                             id="filtro-utm-crm",
-                            options=[{"label": nome_curto(u), "value": u} for u in CAMPANHAS_ESCOPO],
-                            value=CAMPANHAS_ESCOPO, multi=True, placeholder="Todas as campanhas",
+                            options=[{"label": nome_curto(u), "value": u} for u in campanhas_escopo(CARTEIRA_PADRAO)],
+                            value=campanhas_escopo(CARTEIRA_PADRAO), multi=True, placeholder="Todas as campanhas",
                             className="dash-dropdown-escuro",
                         ),
                     ], md=12),
@@ -728,7 +731,7 @@ def _aba_conversao_crm() -> html.Div:
             style={"display": "none"},
         ),
         dbc.Row([
-            dbc.Col(_grafico_card("Ações de CRM por Grupo AB", "grafico-crm-grupo-ab"), md=6),
+            dbc.Col(_grafico_card("Ações de CRM por Prioridade", "grafico-crm-grupo-ab"), md=6),
             dbc.Col(_grafico_card("Ações de CRM por Grupo Estratégico", "grafico-crm-grupo-estrategico"), md=6),
         ], className="g-3 mb-3"),
         dbc.Row([
@@ -736,7 +739,7 @@ def _aba_conversao_crm() -> html.Div:
         ], className="g-3 mb-3"),
         dbc.Card(
             dbc.CardBody([
-                html.H6("Ação × Campanha × Grupo AB (detalhado)", className="mb-3"),
+                html.H6("Ação × Campanha × Prioridade (detalhado)", className="mb-3"),
                 html.Div(id="tabela-crm-pivot-container"),
             ]),
             className="cartao-grafico shadow-sm mb-3",
@@ -783,7 +786,7 @@ def _aba_conversao_crm() -> html.Div:
                 ),
                 dbc.Card(
                     dbc.CardBody([
-                        html.H6("Resultado por Frase × Grupo AB", className="mb-3"),
+                        html.H6("Resultado por Frase × Prioridade", className="mb-3"),
                         html.Div(id="tabela-frase-grupo-ab-container"),
                     ]),
                     className="cartao-grafico shadow-sm mb-3",
@@ -844,7 +847,7 @@ def _aba_conversao_crm() -> html.Div:
                 ),
                 dbc.Card(
                     dbc.CardBody([
-                        html.H6("Resultado por Mensagem × Grupo AB", className="mb-3"),
+                        html.H6("Resultado por Mensagem × Prioridade", className="mb-3"),
                         html.Div(id="tabela-mensagem-whatsapp-grupo-ab-container"),
                     ]),
                     className="cartao-grafico shadow-sm mb-3",
@@ -889,7 +892,7 @@ def _aba_conversao_crm() -> html.Div:
                 ),
                 dbc.Card(
                     dbc.CardBody([
-                        html.H6("Resultado por Template × Grupo AB (Airys)", className="mb-3"),
+                        html.H6("Resultado por Template × Prioridade (Airys)", className="mb-3"),
                         html.Div(id="tabela-mensagem-airys-grupo-ab-container"),
                     ]),
                     className="cartao-grafico shadow-sm mb-3",
@@ -940,7 +943,7 @@ def _aba_conversao_crm() -> html.Div:
                 ),
                 dbc.Card(
                     dbc.CardBody([
-                        html.H6("Resultado por Mensagem × Grupo AB (RCS)", className="mb-3"),
+                        html.H6("Resultado por Mensagem × Prioridade (RCS)", className="mb-3"),
                         html.Div(id="tabela-mensagem-rcs-grupo-ab-container"),
                     ]),
                     className="cartao-grafico shadow-sm mb-3",
@@ -975,7 +978,7 @@ def _aba_diario() -> html.Div:
             dbc.CardBody([
                 dcc.Textarea(
                     id="editor-diario",
-                    value=ler_diario_estrategia(),
+                    value=ler_diario_estrategia(CARTEIRA_PADRAO),
                     className="editor-diario",
                     style={"width": "100%", "height": "560px"},
                 ),
@@ -1060,7 +1063,7 @@ def _aba_jornada_cobranca() -> html.Div:
             dbc.CardBody([
                 dash_table.DataTable(
                     id="tabela-jornada-cobranca",
-                    data=carregar_jornada_cobranca(),
+                    data=carregar_jornada_cobranca(CARTEIRA_PADRAO),
                     columns=[{"name": c, "id": c} for c in COLUNAS_JORNADA_COBRANCA],
                     editable=True,
                     row_deletable=True,
@@ -1130,10 +1133,22 @@ def criar_layout() -> html.Div:
                 html.Div([
                     html.I(className="bi bi-graph-up-arrow", style={"fontSize": "2rem", "color": "#3DA9FC"}),
                     html.Div([
-                        html.H2("Dashboard Executivo de Funil SMS", className="titulo-principal"),
-                        html.P("Casas Bahia · Disparo → Envio → Entrega (base Kolmeya)", className="subtitulo"),
+                        html.H2("Dash de Resultados por Carteiras", className="titulo-principal"),
+                        html.P(
+                            f"{CARTEIRA_PADRAO} · Disparo → Envio → Entrega",
+                            className="subtitulo", id="subtitulo-carteira",
+                        ),
                     ], className="ms-3"),
                 ], className="d-flex align-items-center"),
+                html.Div([
+                    html.Label("Carteira", className="rotulo-filtro d-block"),
+                    dcc.Dropdown(
+                        id="carteira-ativa",
+                        options=[{"label": c, "value": c} for c in CARTEIRAS],
+                        value=CARTEIRA_PADRAO, clearable=False, searchable=False,
+                        className="dash-dropdown-escuro seletor-carteira",
+                    ),
+                ], className="ms-3", style={"minWidth": "220px"}),
                 html.Div(id="legenda-filtros", className="legenda-registros"),
             ], className="cabecalho-dashboard d-flex justify-content-between align-items-center flex-wrap"),
 
@@ -1143,7 +1158,7 @@ def criar_layout() -> html.Div:
             html.Div([
                 html.Button("Funil Geral", id="btn-tab-sms", n_clicks=0,
                             className="aba-botao aba-ativa"),
-                html.Button("Funil por Grupo AB", id="btn-tab-grupo", n_clicks=0,
+                html.Button("Funil por Prioridade", id="btn-tab-grupo", n_clicks=0,
                             className="aba-botao"),
                 html.Button("Funil por Grupo Estratégico", id="btn-tab-grupo-estrategico", n_clicks=0,
                             className="aba-botao"),

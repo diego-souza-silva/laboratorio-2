@@ -256,7 +256,7 @@ def grafico_volume_grupo_ab(df: pd.DataFrame, crm_agregado: pd.DataFrame | None 
     relação à etapa anterior (Enviado/Disparado, Entregue/Enviado, Falhou/Enviado,
     Home/Entregue, Autenticação/Home, Oferta/Autenticação, Acordo/Oferta)."""
     if df.empty:
-        return _layout_base(go.Figure(), "Volume por Grupo AB (sem dados no período)")
+        return _layout_base(go.Figure(), "Volume por Prioridade (sem dados no período)")
 
     ordem = [g for g in GRUPO_AB_ORDEM if g in df["grupo_ab"].unique()]
     agrupado = df.groupby("grupo_ab")[["disparado", "enviado", "entregue", "falhou"]].sum().reindex(ordem)
@@ -294,12 +294,12 @@ def grafico_volume_grupo_ab(df: pd.DataFrame, crm_agregado: pd.DataFrame | None 
 
     fig.update_layout(barmode="group")
     altura = max(380, 34 * n_series * len(agrupado) + 100)
-    return _layout_base(fig, "Volume por Grupo AB (Segmentação de Propensão)", altura=altura)
+    return _layout_base(fig, "Volume por Prioridade (Segmentação de Propensão)", altura=altura)
 
 
 def grafico_taxa_entrega_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
     if agregado.empty:
-        return _layout_base(go.Figure(), "Taxa de Entrega por Grupo AB (sem dados no período)")
+        return _layout_base(go.Figure(), "Taxa de Entrega por Prioridade (sem dados no período)")
 
     ordenado = agregado.iloc[::-1]
     fig = go.Figure(
@@ -312,14 +312,14 @@ def grafico_taxa_entrega_grupo_ab(agregado: pd.DataFrame) -> go.Figure:
         )
     )
     fig.update_xaxes(range=[0, 100])
-    return _layout_base(fig, "Taxa de Entrega por Grupo AB")
+    return _layout_base(fig, "Taxa de Entrega por Prioridade")
 
 
 def formatar_tabela_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
     registros = []
     for _, linha in agregado.iterrows():
         registros.append({
-            "Grupo AB": linha["grupo_ab"],
+            "Prioridade": linha["grupo_ab"],
             "Total Disparado": formatar_numero(linha["total_disparado"]),
             "Total Enviado": formatar_numero(linha["total_enviado"]),
             "Total Entregue": formatar_numero(linha["total_entregue"]),
@@ -556,7 +556,7 @@ def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame, crm_agregado: pd.DataF
     pilha de status — todo mundo no mesmo `offsetgroup` continua empilhado normalmente,
     e cada etapa nova ganha seu próprio grupo, aparecendo ao lado."""
     if agregado.empty:
-        return _layout_base(go.Figure(), "Resultado de WhatsApp por Grupo AB (sem dados no período)")
+        return _layout_base(go.Figure(), "Resultado de WhatsApp por Prioridade (sem dados no período)")
 
     rotulos = [GRUPO_AB_LABEL.get(g, g) for g in agregado["grupo_ab"]]
     fig = go.Figure()
@@ -576,7 +576,7 @@ def grafico_whatsapp_por_grupo_ab(agregado: pd.DataFrame, crm_agregado: pd.DataF
             ))
 
     fig.update_layout(barmode="group")
-    return _layout_base(fig, "Resultado de WhatsApp por Grupo AB")
+    return _layout_base(fig, "Resultado de WhatsApp por Prioridade")
 
 
 def grafico_whatsapp_por_grupo_estrategico(agregado: pd.DataFrame) -> go.Figure:
@@ -598,7 +598,7 @@ def formatar_tabela_whatsapp_grupo_ab(agregado: pd.DataFrame) -> list[dict]:
     registros = []
     for _, linha in agregado.iterrows():
         registros.append({
-            "Grupo AB": linha["grupo_ab"],
+            "Prioridade": linha["grupo_ab"],
             "Total": formatar_numero(linha["total"]),
             "Entregue (não lido)": formatar_numero(linha["Entregue"]),
             "Lido": formatar_numero(linha["Lido"]),
@@ -682,7 +682,7 @@ def grafico_crm_por_campanha(crm_agregado: pd.DataFrame) -> go.Figure:
     return _layout_base(fig, "Ações de CRM por Campanha")
 
 
-def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame, titulo: str = "Ações de CRM por Grupo AB") -> go.Figure:
+def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame, titulo: str = "Ações de CRM por Prioridade") -> go.Figure:
     if crm_agregado.empty:
         return _layout_base(go.Figure(), f"{titulo} (sem dados no período)")
 
@@ -701,13 +701,13 @@ def grafico_crm_por_grupo_ab(crm_agregado: pd.DataFrame, titulo: str = "Ações 
 
 
 def formatar_tabela_crm_grupo_ab(crm_agregado: pd.DataFrame) -> list[dict]:
-    """Tabela simples Grupo AB -> Home/Autenticação/Oferta/Acordo, reutilizada pelos
-    blocos por canal (SMS/WhatsApp Ótima/Airys/RCS) da aba Funil por Grupo AB."""
+    """Tabela simples Prioridade -> Home/Autenticação/Oferta/Acordo, reutilizada pelos
+    blocos por canal (SMS/WhatsApp Ótima/Airys/RCS) da aba Funil por Prioridade."""
     registros = []
     for _, linha in crm_agregado.iterrows():
         home, auth, oferta, acordo = linha["home"], linha["auth"], linha["oferta"], linha["acordo"]
         registros.append({
-            "Grupo AB": GRUPO_AB_LABEL.get(linha["grupo_ab"], linha["grupo_ab"]),
+            "Prioridade": GRUPO_AB_LABEL.get(linha["grupo_ab"], linha["grupo_ab"]),
             "Home": formatar_numero(home),
             "% Home": _percentual_etapa(home, None),
             "Autenticação": formatar_numero(auth),
