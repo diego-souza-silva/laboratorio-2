@@ -1785,6 +1785,7 @@ CUSTO_CONFIG_POR_CANAL_FORNECEDOR = {
     ("sms", "otima"): {"custo_unitario": 0.0500, "base": "enviado"},
     ("rcs", "otima"): {"custo_unitario": 0.0900, "base": "disparado"},
     ("whatsapp", "otima"): {"custo_unitario": 0.0685, "base": "entregue"},
+    ("whatsapp", "airys"): {"custo_unitario": 0.0500, "base": "entregue"},
 }
 
 CANAL_CUSTO_LABEL = {"sms": "SMS", "rcs": "RCS", "whatsapp": "WhatsApp", "email": "Email"}
