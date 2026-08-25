@@ -6,3 +6,7 @@ __pycache__/
 # nunca vai caber no git (ver commit que remove ela do tracking). Casa por qualquer
 # carteira (CARTEIRAS/<nome>/ARQUIVO DA BASE INTEIRA/...).
 **/ARQUIVO DA BASE INTEIRA/base_segmentacao_grupo_ab.csv
+
+# Scripts geradores de apresentações .pptx (apresentacoes/) — saída e deps ficam de fora do git
+apresentacoes/node_modules/
+apresentacoes/*.pptx

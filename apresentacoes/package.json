@@ -1,0 +1,12 @@
+{
+  "name": "casas-bahia-apresentacoes",
+  "private": true,
+  "description": "Scripts que geram os decks .pptx de resultados por canal (SMS, WhatsApp, RCS, Email, consolidado, fraseologia) a partir dos dados de data_processing.py.",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-icons": "^5.7.0",
+    "sharp": "^0.35.3"
+  }
+}
