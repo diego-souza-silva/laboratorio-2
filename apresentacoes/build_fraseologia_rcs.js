@@ -46,36 +46,36 @@ slideCapa(pres, {
     icon: "icon_send_1E2761.png", value: "8.372", valueSize: 19, label: "Disparados com este texto",
   });
   statCard(s, 4.75, 2.85, 3.85, 1.3, {
-    icon: "icon_home_1E2761.png", value: "65", valueSize: 19, label: "Ações de Home geradas",
+    icon: "icon_home_1E2761.png", value: "2", valueSize: 19, label: "Ações de Home geradas",
   });
   statCard(s, 8.8, 2.85, 3.85, 1.3, {
-    icon: "icon_award_2F9E6E.png", value: "18", valueSize: 19, valueColor: GREEN, label: "Acordos gerados (0,22% de conversão)",
+    icon: "icon_award_2F9E6E.png", value: "4", valueSize: 19, valueColor: GREEN, label: "Acordos gerados (0,05% de conversão)",
   });
 
   tabelaDinamica(s, {
     x: 0.7, y: 4.3, w: 5.6, titulo: "ACORDOS POR PRIORIDADE",
     linhas: [
       ["P1 · Máxima", "0", "0%"],
-      ["P2 · Alta", "9", "50%"],
-      ["P3 · Média", "7", "39%"],
-      ["P4 · Baixa", "2", "11%"],
+      ["P2 · Alta", "2", "50%"],
+      ["P3 · Média", "0", "0%"],
+      ["P4 · Baixa", "2", "50%"],
       ["Não Classificado", "0", "0%"],
     ],
-    total: "18",
+    total: "4",
   });
   tabelaDinamica(s, {
     x: 6.75, y: 4.3, w: 5.9, titulo: "ACORDOS POR GRUPO ESTRATÉGICO",
     linhas: [
       ["Abandono Carrinho", "0", "0%"],
       ["Cadastrado", "0", "0%"],
-      ["Engajado", "8", "44%"],
-      ["Topo de Funil", "10", "56%"],
+      ["Engajado", "1", "25%"],
+      ["Topo de Funil", "3", "75%"],
       ["Não Classificado", "0", "0%"],
     ],
-    total: "18",
+    total: "4",
   });
 
-  footer(s, pres, "Números de CRM aqui vêm do cruzamento por telefone (log de CRM inteiro), por isso 18 Acordos — acima dos 4 do capítulo RCS, que usa o cruzamento restrito à campanha (utm). Ver nota metodológica no capítulo RCS sobre essa diferença de escopo.");
+  footer(s, pres, "Números de CRM aqui vêm do cruzamento restrito à campanha RCS (mesmo escopo do capítulo RCS) — os mesmos 4 Acordos, agora abertos por Prioridade e Grupo Estratégico.");
 }
 
 pres.writeFile({ fileName: "casas_bahia_fraseologia_rcs.pptx" }).then(() => console.log("done"));

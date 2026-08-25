@@ -26,6 +26,7 @@ node build_consolidado.js    # gera casas_bahia_consolidado.pptx (10 slides)
 node build_fraseologia_sms.js
 node build_fraseologia_whatsapp.js
 node build_fraseologia_rcs.js
+node build_fraseologia_email.js
 ```
 
 Os `.pptx` gerados **não são versionados** (`.gitignore`) — são entregues ao
@@ -146,6 +147,12 @@ arquivo bruto direto.
   (telefone) não são necessariamente a mesma pessoa rastreável ponta a
   ponta. Nunca junte as duas fontes como se fossem um funil único de
   destinatário — sempre com o alerta explícito nos slides.
+- **`build_fraseologia_email.js` usa ranking de Assunto, não Acordo.** Como a
+  Fonte 1 (única usada nesse deck) não tem destinatário por linha, não existe
+  cruzamento com CRM possível neste nível — diferente de SMS/WhatsApp/RCS, cuja
+  fraseologia mede Acordos por frase. O deck de Email ranqueia os 16 assuntos
+  do período por taxa de abertura (Aberturas ÷ Entregues) e CTOR (Cliques ÷
+  Aberturas), com nota de cautela nos assuntos de amostra mínima (< 20 envios).
 
 ### Deduplicação entre canais (visão consolidada)
 SMS + WhatsApp + RCS usam `telefone_norm` como chave e **se sobrepõem**: somar
