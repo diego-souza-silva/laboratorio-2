@@ -5,7 +5,7 @@ from dash import dash_table, dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    CARTEIRA_PADRAO, CARTEIRAS, COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
+    COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
     STATUS_FUNIL_ORDEM, agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
     calcular_kpis_email_salesforce, campanhas_escopo, carregar_dados_airys, carregar_dados_email_salesforce,
     carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
@@ -155,11 +155,11 @@ def _linha_kpis() -> html.Div:
 
 
 def _painel_filtros() -> dbc.Card:
-    campanhas = campanhas_escopo(CARTEIRA_PADRAO)
-    df = carregar_dados_sms(CARTEIRA_PADRAO)
+    campanhas = campanhas_escopo()
+    df = carregar_dados_sms()
     data_min, data_max, hora_min, hora_max = extremos_data_hora(
-        df, carregar_dados_whatsapp_mensagem(CARTEIRA_PADRAO), carregar_dados_airys(CARTEIRA_PADRAO),
-        carregar_dados_rcs(CARTEIRA_PADRAO),
+        df, carregar_dados_whatsapp_mensagem(), carregar_dados_airys(),
+        carregar_dados_rcs(),
     )
 
     return dbc.Card(
@@ -339,17 +339,16 @@ def _aba_funil_sms() -> html.Div:
             className="cartao-grafico shadow-sm mb-4",
         ),
 
-        html.Div(bloco_email_salesforce(CARTEIRA_PADRAO), id="bloco-email-salesforce-container"),
+        html.Div(bloco_email_salesforce(), id="bloco-email-salesforce-container"),
     ])
 
 
-def bloco_email_salesforce(carteira: str) -> html.Div:
-    """Bloco de e-mail (Salesforce Journey Builder) na aba Funil Geral, por carteira.
-    Diferente dos outros blocos, o conteúdo não responde aos filtros globais de
-    campanha/data/hora/grupo_ab (o export vem já agregado por e-mail/dia pela própria
-    plataforma, sem telefone/timestamp por destinatário) — só à carteira selecionada,
-    recalculado sob demanda (na troca de carteira) em vez de a cada filtro."""
-    df = carregar_dados_email_salesforce(carteira)
+def bloco_email_salesforce() -> html.Div:
+    """Bloco de e-mail (Salesforce Journey Builder) na aba Funil Geral. Diferente dos
+    outros blocos, o conteúdo não responde aos filtros globais de campanha/data/hora/
+    grupo_ab (o export vem já agregado por e-mail/dia pela própria plataforma, sem
+    telefone/timestamp por destinatário)."""
+    df = carregar_dados_email_salesforce()
     kpis = calcular_kpis_email_salesforce(df)
     etapas = calcular_funil_email_salesforce(kpis)
     agregado_jornada = agregar_email_salesforce_por_jornada(df)
@@ -647,8 +646,8 @@ def _aba_conversao_crm() -> html.Div:
                         html.Label("Campanha (UTM) — CRM", className="rotulo-filtro"),
                         dcc.Dropdown(
                             id="filtro-utm-crm",
-                            options=[{"label": nome_curto(u), "value": u} for u in campanhas_escopo(CARTEIRA_PADRAO)],
-                            value=campanhas_escopo(CARTEIRA_PADRAO), multi=True, placeholder="Todas as campanhas",
+                            options=[{"label": nome_curto(u), "value": u} for u in campanhas_escopo()],
+                            value=campanhas_escopo(), multi=True, placeholder="Todas as campanhas",
                             className="dash-dropdown-escuro",
                         ),
                     ], md=12),
@@ -978,7 +977,7 @@ def _aba_diario() -> html.Div:
             dbc.CardBody([
                 dcc.Textarea(
                     id="editor-diario",
-                    value=ler_diario_estrategia(CARTEIRA_PADRAO),
+                    value=ler_diario_estrategia(),
                     className="editor-diario",
                     style={"width": "100%", "height": "560px"},
                 ),
@@ -1063,7 +1062,7 @@ def _aba_jornada_cobranca() -> html.Div:
             dbc.CardBody([
                 dash_table.DataTable(
                     id="tabela-jornada-cobranca",
-                    data=carregar_jornada_cobranca(CARTEIRA_PADRAO),
+                    data=carregar_jornada_cobranca(),
                     columns=[{"name": c, "id": c} for c in COLUNAS_JORNADA_COBRANCA],
                     editable=True,
                     row_deletable=True,
@@ -1133,22 +1132,10 @@ def criar_layout() -> html.Div:
                 html.Div([
                     html.I(className="bi bi-graph-up-arrow", style={"fontSize": "2rem", "color": "#3DA9FC"}),
                     html.Div([
-                        html.H2("Dash de Resultados por Carteiras", className="titulo-principal"),
-                        html.P(
-                            f"{CARTEIRA_PADRAO} · Disparo → Envio → Entrega",
-                            className="subtitulo", id="subtitulo-carteira",
-                        ),
+                        html.H2("Dash de Resultados — Casas Bahia", className="titulo-principal"),
+                        html.P("Disparo → Envio → Entrega", className="subtitulo"),
                     ], className="ms-3"),
                 ], className="d-flex align-items-center"),
-                html.Div([
-                    html.Label("Carteira", className="rotulo-filtro d-block"),
-                    dcc.Dropdown(
-                        id="carteira-ativa",
-                        options=[{"label": c, "value": c} for c in CARTEIRAS],
-                        value=CARTEIRA_PADRAO, clearable=False, searchable=False,
-                        className="dash-dropdown-escuro seletor-carteira",
-                    ),
-                ], className="ms-3", style={"minWidth": "220px"}),
                 html.Div(id="legenda-filtros", className="legenda-registros"),
             ], className="cabecalho-dashboard d-flex justify-content-between align-items-center flex-wrap"),
 

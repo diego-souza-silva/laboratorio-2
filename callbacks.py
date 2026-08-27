@@ -9,7 +9,7 @@ from dash import Input, Output, State, ctx, dash_table, html
 import charts
 import layout
 from data_processing import (
-    BASE_COBRANCA_LABEL, CARTEIRA_PADRAO, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha,
+    BASE_COBRANCA_LABEL, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha,
     agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
@@ -337,54 +337,13 @@ def registrar_callbacks(app):
         return (*estilos, *classes)
 
     @app.callback(
-        Output("subtitulo-carteira", "children"),
-        Output("filtro-utm", "options"),
-        Output("filtro-utm", "value"),
-        Output("filtro-utm-crm", "options"),
-        Output("filtro-utm-crm", "value"),
-        Output("filtro-data", "min_date_allowed"),
-        Output("filtro-data", "max_date_allowed"),
-        Output("filtro-data", "start_date"),
-        Output("filtro-data", "end_date"),
-        Output("filtro-hora", "value"),
-        Output("editor-diario", "value"),
-        Output("tabela-jornada-cobranca", "data", allow_duplicate=True),
-        Output("bloco-email-salesforce-container", "children"),
-        Input("carteira-ativa", "value"),
-        prevent_initial_call=True,
-    )
-    def trocar_carteira(carteira):
-        # Troca de carteira reseta os filtros de campanha/período/hora pro escopo da
-        # nova carteira (senão o filtro continuava com UTMs/datas de outra carteira, o
-        # que filtrava tudo pra vazio) e recarrega Diário/Jornada/Email — os únicos
-        # blocos do dashboard que ainda são montados fora do callback gigante.
-        carteira = carteira or CARTEIRA_PADRAO
-        campanhas = campanhas_escopo(carteira)
-        opcoes_utm = [{"label": charts.nome_curto(u), "value": u} for u in campanhas]
-        data_min, data_max, hora_min, hora_max = extremos_data_hora(
-            carregar_dados_sms(carteira), carregar_dados_whatsapp_mensagem(carteira),
-            carregar_dados_airys(carteira), carregar_dados_rcs(carteira),
-        )
-        return (
-            f"{carteira} · Disparo → Envio → Entrega",
-            opcoes_utm, campanhas,
-            opcoes_utm, campanhas,
-            data_min, data_max, data_min, data_max,
-            [hora_min, hora_max],
-            ler_diario_estrategia(carteira),
-            carregar_jornada_cobranca(carteira),
-            layout.bloco_email_salesforce(carteira),
-        )
-
-    @app.callback(
         Output("status-salvar-diario", "children"),
         Input("btn-salvar-diario", "n_clicks"),
         State("editor-diario", "value"),
-        State("carteira-ativa", "value"),
         prevent_initial_call=True,
     )
-    def salvar_diario(_n_clicks, conteudo, carteira):
-        salvar_diario_estrategia(carteira or CARTEIRA_PADRAO, conteudo)
+    def salvar_diario(_n_clicks, conteudo):
+        salvar_diario_estrategia(conteudo)
         agora = dt.datetime.now().strftime("%H:%M:%S")
         return f"Salvo às {agora}"
 
@@ -403,25 +362,22 @@ def registrar_callbacks(app):
         Output("status-salvar-jornada", "children"),
         Input("btn-salvar-jornada", "n_clicks"),
         State("tabela-jornada-cobranca", "data"),
-        State("carteira-ativa", "value"),
         prevent_initial_call=True,
     )
-    def salvar_jornada(_n_clicks, linhas, carteira):
-        salvar_jornada_cobranca(carteira or CARTEIRA_PADRAO, linhas or [])
+    def salvar_jornada(_n_clicks, linhas):
+        salvar_jornada_cobranca(linhas or [])
         agora = dt.datetime.now().strftime("%H:%M:%S")
         return f"Salvo às {agora}"
 
     @app.callback(
         Output("tabela-jornada-custo-container", "children"),
         Input("tabela-jornada-cobranca", "data"),
-        Input("carteira-ativa", "value"),
     )
-    def atualizar_calculadora_jornada(linhas_jornada, carteira):
-        carteira = carteira or CARTEIRA_PADRAO
+    def atualizar_calculadora_jornada(linhas_jornada):
         linhas_jornada = linhas_jornada or []
         custos = calcular_custo_jornada_por_utm(
-            linhas_jornada, carregar_dados_sms(carteira), carregar_dados_rcs_estilo_sms(carteira),
-            carregar_dados_whatsapp_mensagem(carteira), carregar_dados_airys(carteira), carteira,
+            linhas_jornada, carregar_dados_sms(), carregar_dados_rcs_estilo_sms(),
+            carregar_dados_whatsapp_mensagem(), carregar_dados_airys(),
         )
         registros = [
             {
@@ -611,14 +567,12 @@ def registrar_callbacks(app):
         Input("filtro-grupo-estrategico", "value"),
         Input("filtro-utm-crm", "value"),
         Input("canal-crm-ativo", "data"),
-        Input("carteira-ativa", "value"),
     )
     def atualizar_dashboard(
         utms, data_ini, data_fim, faixa_hora, status, grupos_ab, grupos_estrategicos,
-        utms_crm, canal_crm, carteira,
+        utms_crm, canal_crm,
     ):
-        carteira = carteira or CARTEIRA_PADRAO
-        campanhas = campanhas_escopo(carteira)
+        campanhas = campanhas_escopo()
         utms_sms = [u for u in campanhas if canal_da_campanha(u) == "sms"]
         utms_rcs = [u for u in campanhas if canal_da_campanha(u) == "rcs"]
         utms_whatsapp_otima = [
@@ -627,13 +581,13 @@ def registrar_callbacks(app):
         utms_whatsapp_airys = [
             u for u in campanhas if canal_da_campanha(u) == "whatsapp" and fornecedor_da_campanha(u) == "airys"
         ]
-        kpis_email_salesforce = calcular_kpis_email_salesforce(carregar_dados_email_salesforce(carteira))
+        kpis_email_salesforce = calcular_kpis_email_salesforce(carregar_dados_email_salesforce())
 
-        # `carregar_dados_sms()` descobre TODO arquivo de ARQUIVOS PARA DISPAROS/ da
-        # carteira, de qualquer canal (SMS/WhatsApp/Airys/RCS/Email) — restringe aqui
+        # `carregar_dados_sms()` descobre TODO arquivo de ARQUIVOS PARA DISPAROS/,
+        # de qualquer canal (SMS/WhatsApp/Airys/RCS/Email) — restringe aqui
         # às campanhas de fato SMS/Kolmeya, já que esse é o bloco "SMS (Kolmeya)" do
         # dashboard (senão o Total Disparado soma o disparo de todos os canais juntos).
-        df_completo = carregar_dados_sms(carteira)
+        df_completo = carregar_dados_sms()
         df_completo = df_completo[df_completo["utm_campaign"].isin(utms_sms)]
 
         data_ini_dt = pd.to_datetime(data_ini).date() if data_ini else None
@@ -646,11 +600,11 @@ def registrar_callbacks(app):
             grupos_estrategicos=grupos_estrategicos,
         )
 
-        whatsapp_completo = carregar_dados_whatsapp_mensagem(carteira)
+        whatsapp_completo = carregar_dados_whatsapp_mensagem()
         whatsapp_filtrado = filtrar_dados_whatsapp(
             whatsapp_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-            grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+            grupos_estrategicos=grupos_estrategicos,
         )
         kpis_whatsapp = calcular_kpis_whatsapp(whatsapp_filtrado)
         etapas_whatsapp = calcular_funil_whatsapp(kpis_whatsapp)
@@ -660,19 +614,19 @@ def registrar_callbacks(app):
         whatsapp_filtrado_sem_utm = filtrar_dados_whatsapp(
             whatsapp_completo, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-            grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+            grupos_estrategicos=grupos_estrategicos,
         )
         utms_otima_selecionadas = [u for u in (utms or campanhas) if u in utms_whatsapp_otima]
         agregado_whatsapp_campanha = agregar_whatsapp_por_campanha(
-            whatsapp_filtrado_sem_utm, utms_otima_selecionadas, carteira=carteira,
+            whatsapp_filtrado_sem_utm, utms_otima_selecionadas,
         )
-        total_whatsapp_disparado = total_disparado_campanhas(utms_otima_selecionadas, carteira)
+        total_whatsapp_disparado = total_disparado_campanhas(utms_otima_selecionadas)
 
-        airys_completo = carregar_dados_airys(carteira)
+        airys_completo = carregar_dados_airys()
         airys_filtrado = filtrar_dados_whatsapp(
             airys_completo, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-            grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+            grupos_estrategicos=grupos_estrategicos,
         )
         kpis_airys = calcular_kpis_whatsapp(airys_filtrado)
         kpis_resposta_airys = calcular_kpis_resposta_airys(airys_filtrado)
@@ -684,15 +638,15 @@ def registrar_callbacks(app):
         airys_filtrado_sem_utm = filtrar_dados_whatsapp(
             airys_completo, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-            grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+            grupos_estrategicos=grupos_estrategicos,
         )
         utms_airys_selecionadas = [u for u in (utms or campanhas) if u in utms_whatsapp_airys]
         agregado_airys_campanha = agregar_whatsapp_por_campanha(
-            airys_filtrado_sem_utm, utms_airys_selecionadas, carteira=carteira,
+            airys_filtrado_sem_utm, utms_airys_selecionadas,
         )
-        total_airys_disparado = total_disparado_campanhas(utms_airys_selecionadas, carteira)
+        total_airys_disparado = total_disparado_campanhas(utms_airys_selecionadas)
 
-        rcs_sms = carregar_dados_rcs_estilo_sms(carteira)
+        rcs_sms = carregar_dados_rcs_estilo_sms()
         rcs_sms_filtrado = filtrar_dados(
             rcs_sms, utms=utms, data_ini=data_ini_dt, data_fim=data_fim_dt,
             hora_ini=hora_ini, hora_fim=hora_fim, status=status, grupos_ab=grupos_ab,
@@ -714,7 +668,7 @@ def registrar_callbacks(app):
         )
         linhas_grupo_estrategico_ab_rcs = montar_tabela_grupo_estrategico_com_ab(rcs_sms_filtrado)
 
-        rcs_completo = carregar_dados_rcs(carteira)
+        rcs_completo = carregar_dados_rcs()
 
         kpis = calcular_kpis(filtrado)
         etapas = calcular_funil(filtrado)
@@ -733,7 +687,7 @@ def registrar_callbacks(app):
             f"(de {formatar_numero(len(df_completo))} totais)"
         )
 
-        crm_completo = carregar_dados_crm(carteira)
+        crm_completo = carregar_dados_crm()
         canal_crm = canal_crm or "sms"
         crm_filtrado = crm_completo[crm_completo["utm_medium"] == canal_crm] if not crm_completo.empty else crm_completo
         if not crm_filtrado.empty:
@@ -794,7 +748,7 @@ def registrar_callbacks(app):
             whatsapp_filtrado_crm = filtrar_dados_whatsapp(
                 whatsapp_completo, utms=utms_crm_otima, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-                grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+                grupos_estrategicos=grupos_estrategicos,
             )
             crm_filtrado_otima = (
                 crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_otima)]
@@ -809,7 +763,7 @@ def registrar_callbacks(app):
             grafico_funil_crm_combinado = charts.grafico_funil(
                 calcular_funil_combinado_whatsapp(
                     kpis_whatsapp_otima_crm, totais_crm_otima,
-                    total_disparado=total_disparado_campanhas(utms_crm_otima, carteira),
+                    total_disparado=total_disparado_campanhas(utms_crm_otima),
                 ),
                 cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=f"{titulo_funil_crm} (Ótima)", altura=560,
                 textposition="outside", modo_percentual="etapa",
@@ -818,7 +772,7 @@ def registrar_callbacks(app):
             airys_filtrado_crm = filtrar_dados_whatsapp(
                 airys_completo, utms=utms_crm_airys, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-                grupos_estrategicos=grupos_estrategicos, carteira=carteira,
+                grupos_estrategicos=grupos_estrategicos,
             )
             crm_filtrado_airys = (
                 crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_airys)]
@@ -833,7 +787,7 @@ def registrar_callbacks(app):
             grafico_funil_crm_airys = charts.grafico_funil(
                 calcular_funil_combinado_whatsapp(
                     kpis_whatsapp_airys_crm, totais_crm_airys,
-                    total_disparado=total_disparado_campanhas(utms_crm_airys, carteira),
+                    total_disparado=total_disparado_campanhas(utms_crm_airys),
                 ),
                 cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=f"{titulo_funil_crm} (Airys)", altura=560,
                 textposition="outside", modo_percentual="etapa",
@@ -863,12 +817,12 @@ def registrar_callbacks(app):
             rcs_filtrado_crm = filtrar_dados_whatsapp(
                 rcs_completo, utms=utms_crm_rcs, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
-                grupos_estrategicos=grupos_estrategicos, canal="rcs", carteira=carteira,
+                grupos_estrategicos=grupos_estrategicos, canal="rcs",
             )
             kpis_crm_rcs = calcular_kpis_whatsapp(rcs_filtrado_crm)
             grafico_funil_crm_combinado = charts.grafico_funil(
                 calcular_funil_combinado_whatsapp(
-                    kpis_crm_rcs, totais_crm, total_disparado=total_disparado_campanhas(utms_crm_rcs, carteira),
+                    kpis_crm_rcs, totais_crm, total_disparado=total_disparado_campanhas(utms_crm_rcs),
                 ),
                 cores=charts.CORES_FUNIL_COMBINADO_WHATSAPP, titulo=titulo_funil_crm, altura=560,
                 textposition="outside", modo_percentual="etapa",

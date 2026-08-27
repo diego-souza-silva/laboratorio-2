@@ -29,82 +29,36 @@ import pandas as pd
 from utils import normalizar_frase, normalizar_mensagem_whatsapp, normalizar_telefone, parse_data_pt_br, taxa
 
 RAIZ_PROJETO = Path(__file__).parent
-DIR_CARTEIRAS = RAIZ_PROJETO / "CARTEIRAS"
-
-# Carteiras em escopo do dashboard — cada uma vive em sua própria pasta dentro de
-# CARTEIRAS/, com a mesma estrutura de subpastas (ARQUIVOS PARA DISPAROS/, ARQUIVOS DE
-# RETORNO/, etc.) usada até aqui só pra Casas Bahia. Uma carteira sem nenhum arquivo
-# ainda cai nos mesmos fallbacks de "sem dados" que o resto do app já usa (não quebra,
-# só mostra vazio) — basta criar a pasta e soltar os arquivos quando a operação
-# começar pra valer.
-CARTEIRAS = ["Casas Bahia", "BS2", "Itapeva", "Mercado Pago", "Patrimar", "Tricard", "UOL"]
-CARTEIRA_PADRAO = CARTEIRAS[0]
 
 LIMIAR_VINCULO_RETORNO = 0.8
 
-
-def _raiz_carteira(carteira: str) -> Path:
-    return DIR_CARTEIRAS / carteira
-
-
-def _dir_disparo(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS PARA DISPAROS"
-
-
-def _dir_retorno(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS DE RETORNO"
-
-
-def _dir_retorno_whatsapp(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS DE RETORNO WHATSAPP"
+_DIR_DISPARO = RAIZ_PROJETO / "ARQUIVOS PARA DISPAROS"
+_DIR_RETORNO = RAIZ_PROJETO / "ARQUIVOS DE RETORNO"
+_DIR_RETORNO_WHATSAPP = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP"
+_DIR_RETORNO_WHATSAPP_AIRYS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP AIRYS"
+_DIR_RETORNO_RCS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO RCS"
+_DIR_RETORNO_EMAIL_SALESFORCE = RAIZ_PROJETO / "ARQUIVOS DE RETORNO EMAIL SALESFORCE"
+_DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
+_DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
+_ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
+_ARQUIVO_JORNADA_COBRANCA = RAIZ_PROJETO / "JORNADA_COBRANCA.csv"
 
 
-def _dir_retorno_whatsapp_airys(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS DE RETORNO WHATSAPP AIRYS"
-
-
-def _dir_retorno_rcs(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS DE RETORNO RCS"
-
-
-def _dir_retorno_email_salesforce(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS DE RETORNO EMAIL SALESFORCE"
-
-
-def _dir_log_crm(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVOS LOG"
-
-
-def _dir_base_grupo_ab(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "ARQUIVO DA BASE INTEIRA"
-
-
-def _arquivo_diario_estrategia(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "DIARIO_ESTRATEGIA.md"
-
-
-def _arquivo_jornada_cobranca(carteira: str) -> Path:
-    return _raiz_carteira(carteira) / "JORNADA_COBRANCA.csv"
-
-
-def descobrir_campanhas(carteira: str = CARTEIRA_PADRAO) -> dict[str, Path]:
-    """Descobre automaticamente as campanhas em escopo de uma carteira: todo arquivo em
-    `CARTEIRAS/<carteira>/ARQUIVOS PARA DISPAROS/` vira uma campanha, usando o nome do
+def descobrir_campanhas() -> dict[str, Path]:
+    """Descobre automaticamente as campanhas em escopo: todo arquivo em
+    `ARQUIVOS PARA DISPAROS/` vira uma campanha, usando o nome do
     arquivo (sem extensão) como UTM. Basta soltar o arquivo novo na pasta e reiniciar o
-    app — não precisa editar código nem renomear nada. Carteira sem a pasta ainda
-    (nenhum arquivo entregue) volta um dicionário vazio, não erro."""
-    dir_disparo = _dir_disparo(carteira)
-    if not dir_disparo.exists():
+    app — não precisa editar código nem renomear nada. Pasta ainda inexistente (nenhum
+    arquivo entregue) volta um dicionário vazio, não erro."""
+    if not _DIR_DISPARO.exists():
         return {}
-    return {caminho.stem: caminho for caminho in sorted(dir_disparo.glob("*.csv"))}
+    return {caminho.stem: caminho for caminho in sorted(_DIR_DISPARO.glob("*.csv"))}
 
 
-def campanhas_escopo(carteira: str = CARTEIRA_PADRAO) -> list[str]:
-    """Lista de UTMs em escopo de uma carteira, na ordem descoberta em disco —
-    substitui a antiga constante `CAMPANHAS_ESCOPO` (fixa, calculada uma vez só no
-    import): agora depende de qual carteira está selecionada, então precisa ser
-    recalculada a cada troca."""
-    return list(descobrir_campanhas(carteira).keys())
+def campanhas_escopo() -> list[str]:
+    """Lista de UTMs em escopo, na ordem descoberta em disco — substitui a antiga
+    constante `CAMPANHAS_ESCOPO` (fixa, calculada uma vez só no import)."""
+    return list(descobrir_campanhas().keys())
 
 
 def _telefones_do_arquivo(caminho: Path, coluna: str) -> set[str]:
@@ -117,7 +71,7 @@ def _telefones_do_arquivo(caminho: Path, coluna: str) -> set[str]:
 
 
 def vincular_retornos_a_campanhas(
-    campanhas: dict[str, Path], carteira: str = CARTEIRA_PADRAO, limiar: float = LIMIAR_VINCULO_RETORNO
+    campanhas: dict[str, Path], limiar: float = LIMIAR_VINCULO_RETORNO
 ) -> dict[str, Path]:
     """Liga cada arquivo de `ARQUIVOS DE RETORNO/` (nomeado por job, não por UTM) à
     campanha de disparo com maior fração de telefones em comum. Uma campanha sem
@@ -126,8 +80,7 @@ def vincular_retornos_a_campanhas(
     telefones_disparo = {utm: _telefones_do_arquivo(caminho, "telefone") for utm, caminho in campanhas.items()}
 
     vinculo: dict[str, Path] = {}
-    dir_retorno = _dir_retorno(carteira)
-    arquivos_retorno = sorted(dir_retorno.glob("*.csv")) if dir_retorno.exists() else []
+    arquivos_retorno = sorted(_DIR_RETORNO.glob("*.csv")) if _DIR_RETORNO.exists() else []
     for retorno_path in arquivos_retorno:
         telefones_retorno = _telefones_do_arquivo(retorno_path, "phone")
         if not telefones_retorno:
@@ -374,16 +327,15 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
     return eventos
 
 
-def _carregar_base_segmentacao(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def _carregar_base_segmentacao(forcar_reload: bool = False) -> pd.DataFrame:
     """Lê e cacheia a base de clientes em `ARQUIVO DA BASE INTEIRA/` (todo `.csv` da
     pasta, deduplicado por CPF mantendo a linha mais recente). Fonte compartilhada
     pelos mapas de grupo_ab e grupo_estrategico, pra não ler o arquivo duas vezes."""
-    chave = ("base_segmentacao", carteira)
+    chave = "base_segmentacao"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    dir_base = _dir_base_grupo_ab(carteira)
-    arquivos = sorted(dir_base.glob("*.csv")) if dir_base.exists() else []
+    arquivos = sorted(_DIR_BASE_GRUPO_AB.glob("*.csv")) if _DIR_BASE_GRUPO_AB.exists() else []
     if not arquivos:
         base = pd.DataFrame()
     else:
@@ -406,30 +358,30 @@ def _montar_mapa_telefone(base: pd.DataFrame, coluna_valor: str) -> dict:
     return dict(zip(longo["fone_norm"], longo[coluna_valor]))
 
 
-def carregar_mapa_grupo_ab(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> dict:
+def carregar_mapa_grupo_ab(forcar_reload: bool = False) -> dict:
     """Monta o mapa telefone -> propensão (Prioridade, antigo "grupo_ab") a partir da
-    base de segmentação da carteira (equivalente ao PROCX manual: explode as colunas
+    base de segmentação (equivalente ao PROCX manual: explode as colunas
     FONE_1..FONE_4 e associa cada telefone ao valor da linha do cliente). Aceita tanto
     a coluna "prioridade" (arquivos novos) quanto "grupo_ab" (antigos) — ver
     `_coluna_prioridade`."""
-    chave = ("grupo_ab_mapa", carteira)
+    chave = "grupo_ab_mapa"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
-    base = _carregar_base_segmentacao(carteira, forcar_reload)
+    base = _carregar_base_segmentacao(forcar_reload)
     coluna = _coluna_prioridade(base) or "grupo_ab"
     mapa = _montar_mapa_telefone(base, coluna)
     _cache[chave] = mapa
     return mapa
 
 
-def carregar_mapa_grupo_estrategico(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> dict:
+def carregar_mapa_grupo_estrategico(forcar_reload: bool = False) -> dict:
     """Monta o mapa telefone -> grupo_estrategico (2_ABANDONO_CARRINHO, 3_CADASTRADO,
     4_ENGAJADO, 5_TOPO_FUNIL) a partir da mesma base de segmentação, pelo mesmo
     cruzamento por telefone usado no grupo_ab."""
-    chave = ("grupo_estrategico_mapa", carteira)
+    chave = "grupo_estrategico_mapa"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
-    mapa = _montar_mapa_telefone(_carregar_base_segmentacao(carteira, forcar_reload), "grupo_estrategico")
+    mapa = _montar_mapa_telefone(_carregar_base_segmentacao(forcar_reload), "grupo_estrategico")
     _cache[chave] = mapa
     return mapa
 
@@ -441,22 +393,22 @@ _COLUNAS_VAZIAS_SMS = [
 ]
 
 
-def carregar_dados_sms(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega e unifica os eventos de todas as campanhas descobertas em ARQUIVOS PARA
-    DISPAROS/ da carteira, ligando cada uma ao seu arquivo de retorno por sobreposição
-    de telefones (processamento único, cacheado por carteira). Carteira sem nenhuma
-    campanha ainda (pasta vazia/inexistente) volta um dataframe vazio, não erro."""
-    chave = ("sms", carteira)
+    DISPAROS/, ligando cada uma ao seu arquivo de retorno por sobreposição
+    de telefones (processamento único, cacheado). Nenhuma campanha ainda
+    (pasta vazia/inexistente) volta um dataframe vazio, não erro."""
+    chave = "sms"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    campanhas = descobrir_campanhas(carteira)
+    campanhas = descobrir_campanhas()
     if not campanhas:
         df = pd.DataFrame(columns=_COLUNAS_VAZIAS_SMS)
         _cache[chave] = df
         return df
 
-    vinculos = vincular_retornos_a_campanhas(campanhas, carteira)
+    vinculos = vincular_retornos_a_campanhas(campanhas)
     df = pd.concat(
         [_carregar_campanha(utm, caminho, vinculos.get(utm)) for utm, caminho in campanhas.items()],
         ignore_index=True,
@@ -470,12 +422,12 @@ def carregar_dados_sms(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = Fa
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(carteira, forcar_reload)
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     grupo_ab_telefone = df["telefone_norm"].map(mapa_grupo_ab)
     df["grupo_ab"] = df["grupo_ab_arquivo"].combine_first(grupo_ab_telefone).fillna(NAO_CLASSIFICADO)
     df = df.drop(columns="grupo_ab_arquivo")
 
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(carteira, forcar_reload)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     grupo_estrategico_telefone = df["telefone_norm"].map(mapa_grupo_estrategico)
     df["grupo_estrategico"] = (
         df["grupo_estrategico_arquivo"].combine_first(grupo_estrategico_telefone).fillna(NAO_CLASSIFICADO)
@@ -512,21 +464,20 @@ def _utm_sem_token_rcs(utm: str) -> str:
     return re.sub(r"rcs", "", utm, flags=re.IGNORECASE).strip().lower()
 
 
-def carregar_dados_crm(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o(s) log(s) de CRM (aba de conversão pós-contato) de ARQUIVOS LOG/ da
-    carteira — todo arquivo da pasta é lido e concatenado, e filtrado às campanhas
+def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
+    """Carrega o(s) log(s) de CRM (aba de conversão pós-contato) de ARQUIVOS LOG/ —
+    todo arquivo da pasta é lido e concatenado, e filtrado às campanhas
     cadastradas em ARQUIVOS PARA DISPAROS/ (`campanhas_escopo`) — o log em si cobre
     dezenas de campanhas de teste/outras operações que não interessam aqui. Deduplica
     por uma chave composta (doc + utm campaign + acao + data), já que exports
     diferentes podem ter esquema de colunas diferente (misturar deduplicação por `id`
     com linhas sem essa coluna faz o pandas tratar todo NaN como duplicata entre si,
     descartando quase tudo)."""
-    chave_cache = ("crm", carteira)
+    chave_cache = "crm"
     if not forcar_reload and chave_cache in _cache:
         return _cache[chave_cache]
 
-    dir_log = _dir_log_crm(carteira)
-    arquivos = sorted(dir_log.glob("*.csv")) if dir_log.exists() else []
+    arquivos = sorted(_DIR_LOG_CRM.glob("*.csv")) if _DIR_LOG_CRM.exists() else []
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -541,7 +492,7 @@ def carregar_dados_crm(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = Fa
         df = df.drop_duplicates(chave)
 
     coluna_utm = "utm campaign" if "utm campaign" in df.columns else "utm"
-    mapa_utm_sem_rcs = {_utm_sem_token_rcs(u): u for u in campanhas_escopo(carteira)}
+    mapa_utm_sem_rcs = {_utm_sem_token_rcs(u): u for u in campanhas_escopo()}
     df["utm_campaign"] = df[coluna_utm].apply(_utm_sem_token_rcs).map(mapa_utm_sem_rcs)
     df = df[df["utm_campaign"].notna()].copy()
     df["timestamp"] = df["data"].apply(parse_data_pt_br)
@@ -549,11 +500,11 @@ def carregar_dados_crm(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = Fa
     df = df[df["acao_norm"].isin(ETAPAS_CRM)]
     df["utm_medium"] = df["utm medium"].fillna("").str.strip().str.lower() if "utm medium" in df.columns else ""
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(carteira, forcar_reload)
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
 
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(carteira, forcar_reload)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
 
     _cache[chave_cache] = df
@@ -567,7 +518,7 @@ _COLUNAS_VAZIAS_OTIMA = [
 
 
 def _carregar_retorno_estilo_otima(
-    pasta: Path, cache_key: str, carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False,
+    pasta: Path, cache_key: str, forcar_reload: bool = False,
 ) -> pd.DataFrame:
     """Carrega retorno por destinatário no formato Otima (Destino/Mensagem/Situação/
     Identificador) de qualquer pasta — reutilizado tanto pelo WhatsApp Otima quanto
@@ -576,7 +527,7 @@ def _carregar_retorno_estilo_otima(
     Não Entregue/Não Enviado, sem participar do funil de Disparo/Envio/Entrega que é
     específico do SMS/Kolmeya) e na seção "Resultado por Mensagem" da aba Conversão
     Pós-Contato (CRM)."""
-    chave = (cache_key, carteira)
+    chave = cache_key
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
@@ -605,27 +556,27 @@ def _carregar_retorno_estilo_otima(
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(carteira, forcar_reload)
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(carteira, forcar_reload)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
 
     _cache[chave] = df
     return df
 
 
-def carregar_dados_whatsapp_mensagem(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_whatsapp_mensagem(forcar_reload: bool = False) -> pd.DataFrame:
     """Retorno de WhatsApp Otima em `ARQUIVOS DE RETORNO WHATSAPP/` — ver
     `_carregar_retorno_estilo_otima`."""
     return _carregar_retorno_estilo_otima(
-        _dir_retorno_whatsapp(carteira), "whatsapp_mensagem", carteira, forcar_reload,
+        _DIR_RETORNO_WHATSAPP, "whatsapp_mensagem", forcar_reload,
     )
 
 
-def carregar_dados_rcs(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_rcs(forcar_reload: bool = False) -> pd.DataFrame:
     """Retorno de RCS em `ARQUIVOS DE RETORNO RCS/` — mesma plataforma/formato do
     WhatsApp Otima, ver `_carregar_retorno_estilo_otima`."""
-    return _carregar_retorno_estilo_otima(_dir_retorno_rcs(carteira), "rcs_mensagem", carteira, forcar_reload)
+    return _carregar_retorno_estilo_otima(_DIR_RETORNO_RCS, "rcs_mensagem", forcar_reload)
 
 
 _STATUS_FUNIL_A_PARTIR_DE_SITUACAO = {
@@ -638,7 +589,7 @@ _STATUS_FUNIL_A_PARTIR_DE_SITUACAO = {
 
 
 def _converter_estilo_sms(
-    df: pd.DataFrame, canal: str, cache_key: str, carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False,
+    df: pd.DataFrame, canal: str, cache_key: str, forcar_reload: bool = False,
 ) -> pd.DataFrame:
     """Converte um retorno com granularidade por destinatário (formato WhatsApp/RCS —
     telefone_norm/situacao_norm) pro mesmo formato linha-a-linha do SMS/Kolmeya
@@ -655,15 +606,15 @@ def _converter_estilo_sms(
         "mensagem_norm", "disparado", "enviado", "entregue", "falhou", "status_funil",
         "timestamp", "data", "hora",
     ]
-    chave = (cache_key, carteira)
+    chave = cache_key
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    utms_canal = [u for u in campanhas_escopo(carteira) if canal_da_campanha(u) == canal]
+    utms_canal = [u for u in campanhas_escopo() if canal_da_campanha(u) == canal]
     partes = []
     if not df.empty and utms_canal:
         for utm in utms_canal:
-            telefones = telefones_das_campanhas([utm], carteira)
+            telefones = telefones_das_campanhas([utm])
             sub = df[df["telefone_norm"].isin(telefones)].copy()
             if sub.empty:
                 continue
@@ -695,12 +646,12 @@ def _converter_estilo_sms(
     return resultado
 
 
-def carregar_dados_rcs_estilo_sms(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_rcs_estilo_sms(forcar_reload: bool = False) -> pd.DataFrame:
     """RCS convertido pro formato linha-a-linha do SMS — ver `_converter_estilo_sms`.
     Usado na aba Funil Geral e nas abas Grupo AB/Grupo Estratégico, que já são 100%
     genéricas em relação ao formato desse dataframe."""
     return _converter_estilo_sms(
-        carregar_dados_rcs(carteira, forcar_reload), "rcs", "rcs_estilo_sms", carteira, forcar_reload,
+        carregar_dados_rcs(forcar_reload), "rcs", "rcs_estilo_sms", forcar_reload,
     )
 
 
@@ -765,7 +716,7 @@ _COLUNAS_VAZIAS_AIRYS = [
 ]
 
 
-def carregar_dados_airys(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o retorno do Airys (AirysChat + Meta Graph API) em `ARQUIVOS DE RETORNO
     WHATSAPP AIRYS/` — granularidade por destinatário/mensagem, com status detalhado
     (Entregue/Lido/Enviado/Falhou ou Rejeitado), resposta do cliente (Respondeu após
@@ -774,12 +725,11 @@ def carregar_dados_airys(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = 
     do export vem truncada. O status é traduzido pro mesmo vocabulário usado no
     WhatsApp Otima (Entregue/Lido/Enviado/Não Entregue/Não Enviado), reaproveitando
     toda a agregação/gráficos/tabelas já feitos pra esse formato."""
-    chave = ("airys", carteira)
+    chave = "airys"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    dir_airys = _dir_retorno_whatsapp_airys(carteira)
-    arquivos = sorted(dir_airys.glob("*.csv")) if dir_airys.exists() else []
+    arquivos = sorted(_DIR_RETORNO_WHATSAPP_AIRYS.glob("*.csv")) if _DIR_RETORNO_WHATSAPP_AIRYS.exists() else []
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -790,7 +740,7 @@ def carregar_dados_airys(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = 
     if "provider_message_id" in df.columns:
         df = df.drop_duplicates("provider_message_id")
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(carteira, forcar_reload)
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["telefone_norm"] = (
         df["provider_message_id"].apply(_extrair_telefone_wamid)
         .apply(lambda t: _reconstruir_telefone_airys(t, mapa_grupo_ab) if t else "")
@@ -820,7 +770,7 @@ def carregar_dados_airys(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = 
     df["hora"] = df["timestamp"].dt.hour
 
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(carteira, forcar_reload)
+    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
 
     _cache[chave] = df
@@ -902,19 +852,18 @@ def _parse_outline_email_salesforce(caminho: Path) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
-def carregar_dados_email_salesforce(carteira: str = CARTEIRA_PADRAO, forcar_reload: bool = False) -> pd.DataFrame:
+def carregar_dados_email_salesforce(forcar_reload: bool = False) -> pd.DataFrame:
     """Carrega o(s) export(s) "Main Metrics" do Salesforce Journey Builder em
     ARQUIVOS DE RETORNO EMAIL SALESFORCE/*.xlsx (todo arquivo da pasta é somado) —
     métricas de engajamento por e-mail/dia (Envios/Entregues/Aberturas/Cliques/Bounce),
     bem diferentes do resto do dashboard (aqui não tem telefone nem timestamp por
     destinatário, é um relatório já agregado pela própria plataforma), então essa
     seção não responde aos filtros globais de campanha/data/hora/grupo_ab."""
-    chave = ("email_salesforce", carteira)
+    chave = "email_salesforce"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    dir_email = _dir_retorno_email_salesforce(carteira)
-    arquivos = sorted(dir_email.glob("*.xlsx")) if dir_email.exists() else []
+    arquivos = sorted(_DIR_RETORNO_EMAIL_SALESFORCE.glob("*.xlsx")) if _DIR_RETORNO_EMAIL_SALESFORCE.exists() else []
     partes = [_parse_outline_email_salesforce(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -987,7 +936,7 @@ def agregar_email_salesforce_por_jornada(df: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values("Envios", ascending=False).reset_index(drop=True)
 
 
-def telefones_das_campanhas(utms: list[str], carteira: str = CARTEIRA_PADRAO) -> set[str]:
+def telefones_das_campanhas(utms: list[str]) -> set[str]:
     """Telefones (normalizados) das campanhas selecionadas, direto do arquivo de
     disparo — usado para ligar o retorno de canais sem vínculo automático por job (ex.:
     WhatsApp Otima/Airys) à campanha certa, pelo mesmo cruzamento de telefone usado no
@@ -995,16 +944,16 @@ def telefones_das_campanhas(utms: list[str], carteira: str = CARTEIRA_PADRAO) ->
     interno do fornecedor. Prioriza a coluna `sms_whats` (com DDI, específica do envio
     de WhatsApp/SMS) sobre `telefone` quando o arquivo de disparo tiver as duas — no
     arquivo da Otima elas são idênticas, mas `sms_whats` é a coluna certa caso um
-    arquivo futuro traga números diferentes entre as duas. Cacheado por (carteira,
-    campanha) — não só o resultado final da união: essa função é chamada campanha a
+    arquivo futuro traga números diferentes entre as duas. Cacheado por campanha — não
+    só o resultado final da união: essa função é chamada campanha a
     campanha em vários pontos do dashboard (tabela por campanha de WhatsApp/Airys/RCS)
     a cada atualização de filtro, e sem cache reabriria e reparseria o CSV de disparo
     do zero em cada chamada — com várias campanhas isso é o principal gargalo de
     performance do callback."""
-    campanhas = descobrir_campanhas(carteira)
+    campanhas = descobrir_campanhas()
     telefones: set[str] = set()
     for utm in utms:
-        chave = (carteira, utm)
+        chave = utm
         if chave in _cache_telefones_campanha:
             telefones |= _cache_telefones_campanha[chave]
             continue
@@ -1025,14 +974,14 @@ def telefones_das_campanhas(utms: list[str], carteira: str = CARTEIRA_PADRAO) ->
     return telefones
 
 
-def total_disparado_campanhas(utms: list[str], carteira: str = CARTEIRA_PADRAO) -> int:
+def total_disparado_campanhas(utms: list[str]) -> int:
     """Total de disparos (telefones únicos no arquivo de disparo) das campanhas
     selecionadas — usado como "Total Disparado" de canais cujo retorno é só por
     destinatário (WhatsApp Ótima/Airys), já que o retorno nem sempre cobre 100% do que
     foi de fato disparado (o Airys, por exemplo, só retornou status pra uma fração da
     lista de disparo: 968 de 3804). Somado campanha a campanha (em vez de uma união
     global) pra não subcontar caso o mesmo telefone apareça em mais de uma campanha."""
-    return sum(len(telefones_das_campanhas([utm], carteira)) for utm in utms)
+    return sum(len(telefones_das_campanhas([utm])) for utm in utms)
 
 
 def filtrar_dados_whatsapp(
@@ -1045,7 +994,6 @@ def filtrar_dados_whatsapp(
     grupos_ab: list[str] | None = None,
     grupos_estrategicos: list[str] | None = None,
     canal: str = "whatsapp",
-    carteira: str = CARTEIRA_PADRAO,
 ) -> pd.DataFrame:
     """Aplica os filtros globais (campanha/período/hora/grupo_ab/grupo_estratégico)
     sobre um retorno com granularidade por destinatário (WhatsApp ou RCS), restringindo
@@ -1060,7 +1008,7 @@ def filtrar_dados_whatsapp(
         utms_canal = [u for u in utms if canal_da_campanha(u) == canal]
         if not utms_canal:
             return df.iloc[0:0]
-        filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_canal, carteira))]
+        filtrado = filtrado[filtrado["telefone_norm"].isin(telefones_das_campanhas(utms_canal))]
     if grupos_ab:
         filtrado = filtrado[filtrado["grupo_ab"].isin(grupos_ab)]
     if grupos_estrategicos:
@@ -1137,7 +1085,7 @@ def agregar_whatsapp_por_grupo_estrategico(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def agregar_whatsapp_por_campanha(
-    df: pd.DataFrame, utms: list[str], canal: str = "whatsapp", carteira: str = CARTEIRA_PADRAO,
+    df: pd.DataFrame, utms: list[str], canal: str = "whatsapp",
 ) -> pd.DataFrame:
     """Resultado de WhatsApp/RCS (Entregue/Lido/Enviado/Não Entregue/Não Enviado) por
     campanha, cruzando por telefone — o retorno do Otima não traz a UTM da campanha, só
@@ -1151,7 +1099,7 @@ def agregar_whatsapp_por_campanha(
 
     linhas = []
     for utm in utms_canal:
-        telefones = telefones_das_campanhas([utm], carteira)
+        telefones = telefones_das_campanhas([utm])
         sub = df[df["telefone_norm"].isin(telefones)]
         if sub.empty:
             continue
@@ -1750,21 +1698,18 @@ def extremos_data_hora(*dfs: pd.DataFrame) -> tuple:
     return todas.min(), todas.max(), 0, 23
 
 
-def ler_diario_estrategia(carteira: str = CARTEIRA_PADRAO) -> str:
-    """Lê o diário de estratégia da carteira (arquivo Markdown editável direto pela aba
+def ler_diario_estrategia() -> str:
+    """Lê o diário de estratégia (arquivo Markdown editável direto pela aba
     do dashboard). Se o arquivo ainda não existir, retorna um texto inicial vazio."""
-    arquivo = _arquivo_diario_estrategia(carteira)
-    if arquivo.exists():
-        return arquivo.read_text(encoding="utf-8")
+    if _ARQUIVO_DIARIO_ESTRATEGIA.exists():
+        return _ARQUIVO_DIARIO_ESTRATEGIA.read_text(encoding="utf-8")
     return "# Diário de Estratégia\n\n"
 
 
-def salvar_diario_estrategia(carteira: str, conteudo: str) -> None:
-    """Grava o texto editado na aba do dashboard de volta em
-    CARTEIRAS/<carteira>/DIARIO_ESTRATEGIA.md."""
-    arquivo = _arquivo_diario_estrategia(carteira)
-    arquivo.parent.mkdir(parents=True, exist_ok=True)
-    arquivo.write_text(conteudo or "", encoding="utf-8")
+def salvar_diario_estrategia(conteudo: str) -> None:
+    """Grava o texto editado na aba do dashboard de volta em DIARIO_ESTRATEGIA.md."""
+    _ARQUIVO_DIARIO_ESTRATEGIA.parent.mkdir(parents=True, exist_ok=True)
+    _ARQUIVO_DIARIO_ESTRATEGIA.write_text(conteudo or "", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -1963,30 +1908,26 @@ _JORNADA_COBRANCA_PADRAO = [
 ]
 
 
-def carregar_jornada_cobranca(carteira: str = CARTEIRA_PADRAO) -> list[dict]:
-    """Lê a jornada de cobrança da carteira em JORNADA_COBRANCA.csv. Se o arquivo ainda
-    não existir, a carteira padrão (Casas Bahia) cria com o histórico inicial
-    (`_JORNADA_COBRANCA_PADRAO`); qualquer outra carteira começa com a tabela vazia,
-    já que esse histórico é específico da operação de Casas Bahia."""
-    arquivo = _arquivo_jornada_cobranca(carteira)
-    if not arquivo.exists():
-        padrao = list(_JORNADA_COBRANCA_PADRAO) if carteira == CARTEIRA_PADRAO else []
-        salvar_jornada_cobranca(carteira, padrao)
+def carregar_jornada_cobranca() -> list[dict]:
+    """Lê a jornada de cobrança em JORNADA_COBRANCA.csv. Se o arquivo ainda
+    não existir, cria com o histórico inicial (`_JORNADA_COBRANCA_PADRAO`)."""
+    if not _ARQUIVO_JORNADA_COBRANCA.exists():
+        padrao = list(_JORNADA_COBRANCA_PADRAO)
+        salvar_jornada_cobranca(padrao)
         return padrao
-    df = pd.read_csv(arquivo, dtype=str).fillna("")
+    df = pd.read_csv(_ARQUIVO_JORNADA_COBRANCA, dtype=str).fillna("")
     for coluna in COLUNAS_JORNADA_COBRANCA:
         if coluna not in df.columns:
             df[coluna] = ""
     return df[COLUNAS_JORNADA_COBRANCA].to_dict("records")
 
 
-def salvar_jornada_cobranca(carteira: str, registros: list[dict]) -> None:
-    """Grava a jornada de cobrança da carteira (editada direto na tabela da aba) de
-    volta em CARTEIRAS/<carteira>/JORNADA_COBRANCA.csv."""
-    arquivo = _arquivo_jornada_cobranca(carteira)
-    arquivo.parent.mkdir(parents=True, exist_ok=True)
+def salvar_jornada_cobranca(registros: list[dict]) -> None:
+    """Grava a jornada de cobrança (editada direto na tabela da aba) de
+    volta em JORNADA_COBRANCA.csv."""
+    _ARQUIVO_JORNADA_COBRANCA.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(registros, columns=COLUNAS_JORNADA_COBRANCA).fillna("")
-    df.to_csv(arquivo, index=False, encoding="utf-8-sig")
+    df.to_csv(_ARQUIVO_JORNADA_COBRANCA, index=False, encoding="utf-8-sig")
 
 
 _CANAL_LABEL_PARA_CHAVE = {v.lower(): k for k, v in CANAL_CUSTO_LABEL.items()}
@@ -1995,7 +1936,7 @@ _FORNECEDOR_LABEL_PARA_CHAVE = {v.lower(): k for k, v in FORNECEDOR_CUSTO_LABEL.
 
 def calcular_custo_jornada_por_utm(
     registros_jornada: list[dict], df_sms: pd.DataFrame, df_rcs: pd.DataFrame,
-    df_whatsapp_otima: pd.DataFrame, df_whatsapp_airys: pd.DataFrame, carteira: str = CARTEIRA_PADRAO,
+    df_whatsapp_otima: pd.DataFrame, df_whatsapp_airys: pd.DataFrame,
 ) -> list[dict]:
     """Calculadora interativa da Jornada de Cobrança: usa a(s) UTM(s) digitada(s) em
     cada teste — o mesmo identificador da pasta ARQUIVOS PARA DISPAROS — pra buscar o
@@ -2024,7 +1965,7 @@ def calcular_custo_jornada_por_utm(
             })
             continue
 
-        total_disparado = None if canal_chave == "email" else total_disparado_campanhas(utms, carteira)
+        total_disparado = None if canal_chave == "email" else total_disparado_campanhas(utms)
 
         config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
         if config is None:
@@ -2048,7 +1989,7 @@ def calcular_custo_jornada_por_utm(
             }
         else:
             df_fonte = df_whatsapp_otima if fornecedor_chave == "otima" else df_whatsapp_airys
-            subset = filtrar_dados_whatsapp(df_fonte, utms=utms, canal="whatsapp", carteira=carteira)
+            subset = filtrar_dados_whatsapp(df_fonte, utms=utms, canal="whatsapp")
             quantidades = {
                 "disparado": len(subset),
                 "enviado": int((subset["situacao_norm"] != "Nao Enviado").sum()),

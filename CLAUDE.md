@@ -87,7 +87,7 @@ desenvolvimento.
   qualquer mudança de layout — os dois bugs acima só aparecem no render, não
   no `validate.py`.
 
-## Metodologia de dados — decisões e armadilhas (todas as carteiras)
+## Metodologia de dados — decisões e armadilhas
 
 Isto documenta bugs reais encontrados e corrigidos ao construir os decks —
 releia antes de confiar em qualquer número nesta área do projeto sem
@@ -103,7 +103,7 @@ mensais, use a data embutida no nome do arquivo/UTM da campanha
 (`^(\d{4})(\d{2})(\d{2})`), não o campo `data` derivado do retorno.
 
 ### Prioridade/Grupo Estratégico: sempre a partir do arquivo de disparo
-`carregar_dados_sms(carteira)` retorna o disparo de **todos os canais**
+`carregar_dados_sms()` retorna o disparo de **todos os canais**
 (SMS/WhatsApp/RCS/Email), com `telefone_norm` + `grupo_ab` +
 `grupo_estrategico` corretos por linha. **Essa é a fonte de verdade** para
 composição de Prioridade/GE — nunca derive a composição a partir de uma
@@ -130,7 +130,7 @@ da real — bug encontrado e corrigido nesta sessão).
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
 batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanhas`)
 — os outros 138 são ruído fora de escopo. Sempre use
-`filtrar_dados_whatsapp(df, utms=..., carteira=...)` (que já faz esse
+`filtrar_dados_whatsapp(df, utms=...)` (que já faz esse
 casamento) antes de tirar qualquer número "% do disparo" da Airys, nunca o
 arquivo bruto direto.
 
@@ -157,7 +157,7 @@ arquivo bruto direto.
 ### Deduplicação entre canais (visão consolidada)
 SMS + WhatsApp + RCS usam `telefone_norm` como chave e **se sobrepõem**: somar
 os três totais ingenuamente infla a base (50.247 vs. 35.290 clientes únicos
-reais nesta carteira — 14.957 registros de sobreposição). Email nunca entra
+reais — 14.957 registros de sobreposição). Email nunca entra
 nessa deduplicação (chave diferente, ver acima).
 
 ### Custos confirmados (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR` em `data_processing.py`)
