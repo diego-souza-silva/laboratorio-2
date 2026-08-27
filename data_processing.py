@@ -168,6 +168,31 @@ def fornecedor_da_campanha(utm: str) -> str:
     return utm.rsplit("-", 1)[-1].lower()
 
 
+# Palavra-chave no nome da campanha/UTM -> código de Grupo Estratégico. Usado só como
+# último recurso (`_grupo_estrategico_pelo_nome_campanha`) pra disparo por e-mail sem
+# coluna "grupo_estrategico" própria e sem telefone pra cruzar com a base de
+# segmentação (ver `_preparar_disparo` — telefone_norm fica vazio nesse caso). Mesma
+# inferência que já era feita manualmente nos decks .pptx de fraseologia de Email (ver
+# CLAUDE.md, seção "Email tem duas identidades") — checar antes "abandonocarrinho" que
+# "cadastrado"/"engajado"/"topofunil" não é ambíguo: os quatro nomes não se sobrepõem.
+_PALAVRA_GRUPO_ESTRATEGICO_NO_NOME = [
+    ("abandonocarrinho", "2_ABANDONO_CARRINHO"),
+    ("cadastrado", "3_CADASTRADO"),
+    ("engajado", "4_ENGAJADO"),
+    ("topofunil", "5_TOPO_FUNIL"),
+]
+
+
+def _grupo_estrategico_pelo_nome_campanha(utm: str) -> str | None:
+    """Infere o Grupo Estratégico pelo nome da campanha/UTM — `None` se nenhuma
+    palavra-chave bater (fica em Não Classificado, sem inventar)."""
+    utm_lower = (utm or "").lower()
+    for palavra, grupo in _PALAVRA_GRUPO_ESTRATEGICO_NO_NOME:
+        if palavra in utm_lower:
+            return grupo
+    return None
+
+
 SITUACOES_WHATSAPP = ["Entregue", "Lido", "Enviado", "Nao Entregue", "Nao Enviado"]
 _SITUACAO_WHATSAPP_MAPA = {
     "entregue": "Entregue",
@@ -287,6 +312,14 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
         grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = (
             grupo_estrategico_arquivo["grupo_estrategico_arquivo"].str.upper()
         )
+    elif tipo_identificador == "email":
+        # Disparo por e-mail nunca cruza por telefone (telefone_norm fica vazio, ver
+        # `_preparar_disparo`), então sem a coluna própria essas linhas ficariam 100%
+        # Não Classificado — último recurso: inferir pelo nome da campanha/UTM.
+        grupo_inferido = _grupo_estrategico_pelo_nome_campanha(utm)
+        if grupo_inferido:
+            grupo_estrategico_arquivo = disparo[["identificador_norm"]].copy()
+            grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = grupo_inferido
 
     # A frase do SMS (com link único por cliente) vem do próprio arquivo de disparo,
     # disponível pra 100% das linhas — diferente da "mensagem" do retorno, que só
