@@ -23,8 +23,11 @@ O navegador abre automaticamente em `http://127.0.0.1:8051/`.
 - `ARQUIVOS PARA DISPAROS/`, `ARQUIVOS DE RETORNO/`, `ARQUIVOS DE RETORNO WHATSAPP/`,
   `ARQUIVOS LOG/`, `ARQUIVO DA BASE INTEIRA/` — pastas de dados na raiz do projeto (ao
   lado de `app.py`), descritas abaixo.
-- `DIARIO_ESTRATEGIA.md` — bloco de notas com o histórico de decisões/estratégia por dia,
-  editável direto na aba "Diário / Estratégia" do dashboard (botão "Salvar" grava aqui).
+- `ANOTACOES_CALENDARIO.json` — anotações livres por dia, editáveis direto na aba
+  "Calendário de Estratégia" do dashboard (botão "Salvar Anotações" grava aqui). Cada
+  dia do calendário também mostra automaticamente as campanhas de fato disparadas
+  naquela data (Grupo Estratégico, volume, canal e fornecedor), sem precisar editar
+  nada — vem direto de `ARQUIVOS PARA DISPAROS/`.
 
 ## Rotina de atualização diária
 

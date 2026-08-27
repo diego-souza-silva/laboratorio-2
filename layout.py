@@ -1,15 +1,18 @@
 """Layout Dash/Bootstrap do dashboard executivo (tema escuro, estilo Power BI)."""
 from __future__ import annotations
 
+import calendar as calendar_mod
+import datetime as dt
+
 from dash import dash_table, dcc, html
 import dash_bootstrap_components as dbc
 
 from data_processing import (
-    COLUNAS_JORNADA_COBRANCA, GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
+    GRUPO_AB_ORDEM, GRUPO_ESTRATEGICO_ORDEM,
     STATUS_FUNIL_ORDEM, agregar_email_salesforce_por_jornada, calcular_funil_email_salesforce,
-    calcular_kpis_email_salesforce, campanhas_escopo, carregar_dados_airys, carregar_dados_email_salesforce,
-    carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    carregar_jornada_cobranca, extremos_data_hora, ler_diario_estrategia,
+    calcular_kpis_email_salesforce, campanhas_escopo, carregar_anotacoes_calendario, carregar_dados_airys,
+    carregar_dados_email_salesforce, carregar_dados_rcs, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
+    extremos_data_hora, resumo_campanhas_por_dia,
 )
 from charts import (
     CORES, GRUPO_AB_LABEL, GRUPO_ESTRATEGICO_LABEL, formatar_tabela_email_salesforce,
@@ -961,33 +964,109 @@ def _aba_conversao_crm() -> html.Div:
     ])
 
 
-def _aba_diario() -> html.Div:
+MESES_LABEL = [
+    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+]
+_DIAS_SEMANA_LABEL = [
+    "Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado",
+]
+
+
+def montar_grade_calendario(ano: int, mes: int) -> html.Div:
+    """Monta a grade do mês (semana começando no domingo) — cada dia mostra as
+    campanhas de fato disparadas naquela data (`resumo_campanhas_por_dia`, direto de
+    ARQUIVOS PARA DISPAROS/) e uma `dcc.Textarea` de anotação livre, já carregada com o
+    texto salvo (`carregar_anotacoes_calendario`). O id da textarea usa pattern-matching
+    (`{"type": "anotacao-calendario-dia", "data": <iso>}`) pro callback de salvar
+    conseguir ler todas de uma vez, independente de quantos dias o mês tem."""
+    resumo = resumo_campanhas_por_dia()
+    anotacoes = carregar_anotacoes_calendario()
+    semanas = calendar_mod.Calendar(firstweekday=6).monthdayscalendar(ano, mes)
+
+    cabecalho = html.Div(
+        [html.Div(d.upper(), className="calendario-dia-semana-label") for d in _DIAS_SEMANA_LABEL],
+        className="calendario-grid calendario-cabecalho",
+    )
+
+    linhas = [cabecalho]
+    for semana in semanas:
+        celulas = []
+        for dia in semana:
+            if dia == 0:
+                celulas.append(html.Div(className="calendario-dia calendario-dia-fora"))
+                continue
+            data_iso = f"{ano:04d}-{mes:02d}-{dia:02d}"
+            campanhas_dia = resumo.get(data_iso, [])
+
+            filhos = [html.Div(str(dia), className="calendario-dia-numero")]
+            if campanhas_dia:
+                blocos = []
+                for c in campanhas_dia:
+                    grupo_label = GRUPO_ESTRATEGICO_LABEL.get(c["grupo_estrategico"], c["grupo_estrategico"])
+                    bloco = [
+                        html.Div(f"{grupo_label} ({dia:02d}/{mes:02d})", className="calendario-campanha-titulo"),
+                        html.Div(
+                            f"{formatar_numero(c['volume'])} disparos · {c['fornecedor']} ({c['canal']})",
+                            className="calendario-campanha-info",
+                        ),
+                    ]
+                    if c.get("frase"):
+                        trecho = c["frase"] if len(c["frase"]) <= 110 else c["frase"][:107] + "..."
+                        bloco.append(html.Div(trecho, className="calendario-campanha-frase"))
+                    blocos.append(html.Div(bloco, className="calendario-campanha"))
+                filhos.append(html.Div(blocos, className="calendario-campanhas-lista"))
+
+            filhos.append(dcc.Textarea(
+                id={"type": "anotacao-calendario-dia", "data": data_iso},
+                value=anotacoes.get(data_iso, ""),
+                placeholder="Anotação do dia...",
+                className="calendario-anotacao",
+            ))
+
+            classe = "calendario-dia" + (" calendario-dia-com-campanha" if campanhas_dia else "")
+            celulas.append(html.Div(filhos, className=classe))
+        linhas.append(html.Div(celulas, className="calendario-grid"))
+
+    return html.Div(linhas, className="calendario-mes")
+
+
+def _aba_calendario() -> html.Div:
+    resumo = resumo_campanhas_por_dia()
+    if resumo:
+        ultima_data = max(resumo.keys())
+        ano_inicial, mes_inicial = int(ultima_data[:4]), int(ultima_data[5:7])
+    else:
+        hoje = dt.date.today()
+        ano_inicial, mes_inicial = hoje.year, hoje.month
+
     return html.Div([
         dbc.Alert(
             [
-                html.I(className="bi bi-journal-text me-2"),
-                "Bloco de notas livre para registrar a estratégia e as decisões de cada "
-                "dia. Escreva à vontade e clique em \"Salvar\" — o texto fica gravado em "
-                "DIARIO_ESTRATEGIA.md, na pasta do projeto, e continua aqui mesmo depois "
-                "de reiniciar o dashboard.",
+                html.I(className="bi bi-calendar3 me-2"),
+                "Calendário de estratégia: cada dia mostra automaticamente as campanhas "
+                "de fato disparadas naquela data (Grupo Estratégico, volume, canal e "
+                "fornecedor, direto de ARQUIVOS PARA DISPAROS/) e um campo livre pra "
+                "anotar o que foi feito ou planejado. Escreva à vontade e clique em "
+                "\"Salvar Anotações\" — o texto fica gravado em ANOTACOES_CALENDARIO.json "
+                "e continua aqui mesmo depois de reiniciar o dashboard.",
             ],
             color="info", className="mb-3",
         ),
-        dbc.Card(
-            dbc.CardBody([
-                dcc.Textarea(
-                    id="editor-diario",
-                    value=ler_diario_estrategia(),
-                    className="editor-diario",
-                    style={"width": "100%", "height": "560px"},
-                ),
-                html.Div([
-                    dbc.Button("Salvar", id="btn-salvar-diario", color="primary", className="mt-3"),
-                    html.Span(id="status-salvar-diario", className="legenda-registros ms-3"),
-                ], className="d-flex align-items-center"),
-            ]),
-            className="cartao-grafico shadow-sm",
-        ),
+        html.Div([
+            dbc.Button("‹", id="btn-calendario-mes-anterior", color="secondary", size="sm", className="me-2"),
+            html.Span(
+                id="calendario-mes-label",
+                style={"minWidth": "170px", "textAlign": "center", "display": "inline-block"},
+                className="fw-bold",
+            ),
+            dbc.Button("›", id="btn-calendario-mes-seguinte", color="secondary", size="sm", className="ms-2"),
+            html.Div(style={"flex": "1"}),
+            dbc.Button("Salvar Anotações", id="btn-salvar-calendario", color="primary"),
+            html.Span(id="status-salvar-calendario", className="legenda-registros ms-3"),
+        ], className="d-flex align-items-center mb-3"),
+        dcc.Store(id="calendario-ano-mes", data={"ano": ano_inicial, "mes": mes_inicial}),
+        html.Div(id="calendario-grid-container"),
     ])
 
 
@@ -1039,98 +1118,16 @@ def _aba_custos() -> html.Div:
     ])
 
 
-def _aba_jornada_cobranca() -> html.Div:
-    return html.Div([
-        dbc.Alert(
-            [
-                html.I(className="bi bi-signpost-2-fill me-2"),
-                "Histórico das rodadas de disparo (\"testes\") — data, canal, fornecedor, "
-                "UTM(s) usada(s) e o que foi feito em cada uma. Edite direto nas células, "
-                "use \"Adicionar Linha\" pra registrar um novo teste e \"Salvar\" pra "
-                "gravar em JORNADA_COBRANCA.csv — fica registrado mesmo depois de "
-                "reiniciar o dashboard. Diferente do Diário (bloco de notas livre), aqui "
-                "cada linha é um teste com campos fixos, fácil de consultar depois. A "
-                "coluna \"UTM(s)\" precisa bater com o nome do arquivo em ARQUIVOS PARA "
-                "DISPAROS/ (sem \".csv\"), separando por vírgula quando o teste usou mais "
-                "de uma campanha — é o que alimenta a calculadora abaixo. Ótima e Airys "
-                "de um mesmo teste ficam em linhas separadas, já que são fornecedores "
-                "diferentes (custo unitário e UTM próprios).",
-            ],
-            color="info", className="mb-3",
-        ),
-        dbc.Card(
-            dbc.CardBody([
-                dash_table.DataTable(
-                    id="tabela-jornada-cobranca",
-                    data=carregar_jornada_cobranca(),
-                    columns=[{"name": c, "id": c} for c in COLUNAS_JORNADA_COBRANCA],
-                    editable=True,
-                    row_deletable=True,
-                    sort_action="native",
-                    style_as_list_view=True,
-                    style_table={"overflowX": "auto"},
-                    style_header={
-                        "backgroundColor": "#101623", "color": "#8B93A7", "fontWeight": "600",
-                        "textTransform": "uppercase", "fontSize": "0.72rem", "border": "none",
-                    },
-                    style_cell={
-                        "backgroundColor": "#151B26", "color": "#E5E9F0", "border": "none",
-                        "padding": "10px 12px", "fontSize": "0.85rem", "textAlign": "left",
-                        "whiteSpace": "normal", "height": "auto",
-                    },
-                    style_cell_conditional=[
-                        {"if": {"column_id": "Data"}, "minWidth": "110px", "width": "110px"},
-                        {"if": {"column_id": "Teste"}, "minWidth": "90px", "width": "90px"},
-                        {"if": {"column_id": "Canal"}, "minWidth": "100px", "width": "100px"},
-                        {"if": {"column_id": "Fornecedor"}, "minWidth": "120px", "width": "120px"},
-                        {"if": {"column_id": "UTM(s)"}, "minWidth": "320px"},
-                        {"if": {"column_id": "Descrição"}, "minWidth": "420px"},
-                        {"if": {"column_id": "Volume"}, "minWidth": "140px", "width": "140px"},
-                    ],
-                    style_data_conditional=[
-                        {"if": {"row_index": "odd"}, "backgroundColor": "#121722"},
-                    ],
-                ),
-                html.Div([
-                    dbc.Button("Adicionar Linha", id="btn-add-linha-jornada", color="secondary", className="mt-3"),
-                    dbc.Button("Salvar", id="btn-salvar-jornada", color="primary", className="mt-3 ms-2"),
-                    html.Span(id="status-salvar-jornada", className="legenda-registros ms-3"),
-                ], className="d-flex align-items-center"),
-            ]),
-            className="cartao-grafico shadow-sm mb-3",
-        ),
-        dbc.Alert(
-            [
-                html.I(className="bi bi-calculator-fill me-2"),
-                "Calculadora interativa: busca o \"Total Disparado\" direto do arquivo de "
-                "disparo (pasta ARQUIVOS PARA DISPAROS, a mesma fonte usada no resto do "
-                "dashboard) pela(s) UTM(s) da linha, e a quantidade cobrada dos dados "
-                "reais de retorno daquela(s) UTM(s), conforme a base de cobrança do "
-                "fornecedor (coluna \"Base de Cobrança\", igual na aba Custos) × o custo "
-                "unitário — recalcula sozinha a cada edição, linha nova ou linha apagada, "
-                "sem precisar clicar em \"Salvar\". Email não tem telefone no arquivo de "
-                "disparo (fica sem Total Disparado); linhas com mais de um fornecedor "
-                "(ex.: \"Ótima e Airys\" na mesma célula) ou sem custo confirmado ficam "
-                "em \"—\" — sem inventar valor.",
-            ],
-            color="info", className="mb-3",
-        ),
-        dbc.Card(
-            dbc.CardBody([
-                html.H6("Calculadora de Custo por Teste", className="mb-3"),
-                html.Div(id="tabela-jornada-custo-container"),
-            ]),
-            className="cartao-grafico shadow-sm",
-        ),
-    ])
-
 
 def criar_layout() -> html.Div:
     return dbc.Container(
         [
             html.Div([
                 html.Div([
-                    html.I(className="bi bi-graph-up-arrow", style={"fontSize": "2rem", "color": "#3DA9FC"}),
+                    html.Div([
+                        html.Span("CASAS", className="logo-casas-bahia logo-casas-bahia-azul"),
+                        html.Span("BAHIA", className="logo-casas-bahia logo-casas-bahia-vermelho"),
+                    ], className="logo-casas-bahia-container"),
                     html.Div([
                         html.H2("Dash de Resultados — Casas Bahia", className="titulo-principal"),
                         html.P("Disparo → Envio → Entrega", className="subtitulo"),
@@ -1153,9 +1150,7 @@ def criar_layout() -> html.Div:
                             className="aba-botao"),
                 html.Button("Custos", id="btn-tab-custos", n_clicks=0,
                             className="aba-botao"),
-                html.Button("Diário / Estratégia", id="btn-tab-diario", n_clicks=0,
-                            className="aba-botao"),
-                html.Button("Jornada de Cobrança", id="btn-tab-jornada", n_clicks=0,
+                html.Button("Calendário de Estratégia", id="btn-tab-calendario", n_clicks=0,
                             className="aba-botao"),
             ], className="barra-abas"),
 
@@ -1164,8 +1159,7 @@ def criar_layout() -> html.Div:
             html.Div(_aba_grupo_estrategico(), id="painel-tab-grupo-estrategico", style={"display": "none"}),
             html.Div(_aba_conversao_crm(), id="painel-tab-crm", style={"display": "none"}),
             html.Div(_aba_custos(), id="painel-tab-custos", style={"display": "none"}),
-            html.Div(_aba_diario(), id="painel-tab-diario", style={"display": "none"}),
-            html.Div(_aba_jornada_cobranca(), id="painel-tab-jornada", style={"display": "none"}),
+            html.Div(_aba_calendario(), id="painel-tab-calendario", style={"display": "none"}),
             dcc.Store(id="canal-crm-ativo", data="sms"),
         ],
         fluid=True,

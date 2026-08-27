@@ -21,6 +21,7 @@ Cada telefone do arquivo de retorno sempre existe na base de disparo corresponde
 from __future__ import annotations
 
 import base64
+import json
 import re
 from pathlib import Path
 
@@ -40,8 +41,7 @@ _DIR_RETORNO_RCS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO RCS"
 _DIR_RETORNO_EMAIL_SALESFORCE = RAIZ_PROJETO / "ARQUIVOS DE RETORNO EMAIL SALESFORCE"
 _DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
 _DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
-_ARQUIVO_DIARIO_ESTRATEGIA = RAIZ_PROJETO / "DIARIO_ESTRATEGIA.md"
-_ARQUIVO_JORNADA_COBRANCA = RAIZ_PROJETO / "JORNADA_COBRANCA.csv"
+_ARQUIVO_ANOTACOES_CALENDARIO = RAIZ_PROJETO / "ANOTACOES_CALENDARIO.json"
 
 
 def descobrir_campanhas() -> dict[str, Path]:
@@ -240,11 +240,17 @@ def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     Salesforce), normaliza o identificador e remove duplicatas. Retorna o tipo
     ("telefone"/"email") para decidir depois como tentar ligar o retorno."""
     disparo = disparo.copy()
+    # Arquivos de disparo por e-mail vêm ora com a coluna "email", ora "email_1"
+    # (mesma origem/fornecedor, exportação varia) — sem esse fallback, um arquivo com
+    # "email_1" caía no "desconhecido" e todo o disparo sumia (identificador_norm vazio
+    # em 100% das linhas), zerando o volume da campanha inteira. Bug real encontrado
+    # em 20260730-CBtopofunildia30-salesforce.csv (3.035 linhas descartadas).
+    coluna_email = "email" if "email" in disparo.columns else ("email_1" if "email_1" in disparo.columns else None)
     if "telefone" in disparo.columns:
         disparo["identificador_norm"] = disparo["telefone"].apply(normalizar_telefone)
         tipo = "telefone"
-    elif "email" in disparo.columns:
-        disparo["identificador_norm"] = disparo["email"].fillna("").str.strip().str.lower()
+    elif coluna_email:
+        disparo["identificador_norm"] = disparo[coluna_email].fillna("").str.strip().str.lower()
         tipo = "email"
     else:
         disparo["identificador_norm"] = ""
@@ -1698,20 +1704,6 @@ def extremos_data_hora(*dfs: pd.DataFrame) -> tuple:
     return todas.min(), todas.max(), 0, 23
 
 
-def ler_diario_estrategia() -> str:
-    """Lê o diário de estratégia (arquivo Markdown editável direto pela aba
-    do dashboard). Se o arquivo ainda não existir, retorna um texto inicial vazio."""
-    if _ARQUIVO_DIARIO_ESTRATEGIA.exists():
-        return _ARQUIVO_DIARIO_ESTRATEGIA.read_text(encoding="utf-8")
-    return "# Diário de Estratégia\n\n"
-
-
-def salvar_diario_estrategia(conteudo: str) -> None:
-    """Grava o texto editado na aba do dashboard de volta em DIARIO_ESTRATEGIA.md."""
-    _ARQUIVO_DIARIO_ESTRATEGIA.parent.mkdir(parents=True, exist_ok=True)
-    _ARQUIVO_DIARIO_ESTRATEGIA.write_text(conteudo or "", encoding="utf-8")
-
-
 # ---------------------------------------------------------------------------
 # Custos de disparo
 # ---------------------------------------------------------------------------
@@ -1827,179 +1819,78 @@ def calcular_custo_total_por_canal(linhas_custo: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 # Jornada de Cobrança
 # ---------------------------------------------------------------------------
-# Registro editável (pela própria aba do dashboard) de cada rodada de disparo —
-# igual um histórico de testes, não um cálculo derivado dos dados. Persistido em
-# CSV pra sobreviver a reinícios, no mesmo espírito do Diário de Estratégia.
-COLUNAS_JORNADA_COBRANCA = ["Data", "Teste", "Canal", "Fornecedor", "UTM(s)", "Descrição", "Volume"]
-
-_JORNADA_COBRANCA_PADRAO = [
-    {
-        "Data": "25/07/2026", "Teste": "Teste 1", "Canal": "SMS", "Fornecedor": "Kolmeya",
-        "UTM(s)": "20260725-abandonocarrinhodia25-kolmeya, 20260725-cadastradodia25-kolmeya, "
-                   "20260725-engajadodia25-kolmeya, 20260725-topofunildia25-kolmeya",
-        "Descrição": "Planejado em 24/07. Disparo proporcional por grupo de propensão "
-                      "(P1 a P4), 2.000 clientes em cada.",
-        "Volume": "8.024",
-    },
-    {
-        "Data": "27/07/2026", "Teste": "Teste 2", "Canal": "Email", "Fornecedor": "Salesforce",
-        "UTM(s)": "20260727-CBtopofunildia27-salesforce",
-        "Descrição": "Grupo Topo de Funil inteiro, disparo proporcional em 2 levas: 1ª "
-                      "leva com 9 clientes em cada P (P1 a P4); 2ª leva com 1.000 "
-                      "clientes em cada um de P2, P3 e P4.",
-        "Volume": "3.036 (36 + 3.000)",
-    },
-    {
-        "Data": "28/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Ótima",
-        "UTM(s)": "20260728-CBlaboratorionowpp-otima",
-        "Descrição": "Mesma base dos testes de 25/07 e 27/07, metade disparada via Ótima.",
-        "Volume": "3.807",
-    },
-    {
-        "Data": "29/07/2026", "Teste": "Teste 3", "Canal": "WhatsApp", "Fornecedor": "Airys",
-        "UTM(s)": "20260728-CBlaboratorionowpp-airys",
-        "Descrição": "Mesma base dos testes de 25/07 e 27/07, a outra metade disparada via Airys.",
-        "Volume": "3.804",
-    },
-    {
-        "Data": "31/07/2026", "Teste": "Teste 4", "Canal": "Email", "Fornecedor": "Salesforce",
-        "UTM(s)": "20260730-CBabandonocarrinhodia30-salesforce, 20260730-CBcadastradodia30-salesforce, "
-                   "20260730-CBengajadodia30-salesforce, 20260730-CBtopofunildia30-salesforce",
-        "Descrição": "Todos os grupos estratégicos, só origens de e-mail validadas "
-                      "(cadastro, engajado, log, válido). Disparo previsto pra 30/07, "
-                      "adiado pra 31/07 porque os links trackeados não funcionavam.",
-        "Volume": "",
-    },
-    {
-        "Data": "03/08/2026", "Teste": "Teste 5", "Canal": "SMS", "Fornecedor": "Kolmeya",
-        "UTM(s)": "20260803-abandonocarrinhodia03-kolmeya, 20260803-engajadodia03-kolmeya, "
-                   "20260803-topofunildia03-kolmeya, 20260804-cadastradodia03-kolmeya",
-        "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4) novamente, "
-                      "2.000 clientes em cada.",
-        "Volume": "8.026",
-    },
-    {
-        "Data": "04/08/2026", "Teste": "Teste 6", "Canal": "RCS", "Fornecedor": "Ótima",
-        "UTM(s)": "20260804-CBtopofunildia4RCS-otima",
-        "Descrição": "Somente Topo de Funil.",
-        "Volume": "8.372",
-    },
-    {
-        "Data": "06/08/2026", "Teste": "Teste 7", "Canal": "SMS", "Fornecedor": "Kolmeya",
-        "UTM(s)": "20260806-CBabandonocarrinhodia06-kolmeya, 20260806-CBcadastradodia06-kolmeya, "
-                   "20260806-CBengajadodia06-kolmeya, 20260806-CBtopofunildia06-kolmeya",
-        "Descrição": "Disparo proporcional por grupo de propensão (P1 a P4), 6.000 "
-                      "clientes em cada.",
-        "Volume": "18.356",
-    },
-    {
-        "Data": "08/08/2026", "Teste": "Teste 8", "Canal": "SMS", "Fornecedor": "Kolmeya",
-        "UTM(s)": "20260808-CBabandonocarrinhodia08-kolmeya, 20260808-CBengajadodia08-kolmeya, "
-                   "20260808-cadastradodia08-kolmeya",
-        "Descrição": "Grupos estratégicos: Cadastrados, Abandono de Carrinho e Engajados.",
-        "Volume": "8.186",
-    },
-    {
-        "Data": "10/08/2026", "Teste": "Teste 9", "Canal": "SMS", "Fornecedor": "Kolmeya",
-        "UTM(s)": "20260810-CBtopofunildia10-kolmeya",
-        "Descrição": "Somente Topo de Funil.",
-        "Volume": "5.278",
-    },
-]
+# Calendário de Estratégia — substitui o Diário e a Jornada de Cobrança antigos.
+# Cada dia do mês mostra as campanhas de fato disparadas naquela data (derivadas
+# direto de ARQUIVOS PARA DISPAROS/, mesma fonte de verdade do resto do app — nunca
+# reescritas à mão) + uma anotação livre editável, persistida em
+# ANOTACOES_CALENDARIO.json (chave = data ISO "AAAA-MM-DD").
+_PADRAO_DATA_UTM = re.compile(r"^(\d{4})(\d{2})(\d{2})")
 
 
-def carregar_jornada_cobranca() -> list[dict]:
-    """Lê a jornada de cobrança em JORNADA_COBRANCA.csv. Se o arquivo ainda
-    não existir, cria com o histórico inicial (`_JORNADA_COBRANCA_PADRAO`)."""
-    if not _ARQUIVO_JORNADA_COBRANCA.exists():
-        padrao = list(_JORNADA_COBRANCA_PADRAO)
-        salvar_jornada_cobranca(padrao)
-        return padrao
-    df = pd.read_csv(_ARQUIVO_JORNADA_COBRANCA, dtype=str).fillna("")
-    for coluna in COLUNAS_JORNADA_COBRANCA:
-        if coluna not in df.columns:
-            df[coluna] = ""
-    return df[COLUNAS_JORNADA_COBRANCA].to_dict("records")
+def resumo_campanhas_por_dia() -> dict[str, list[dict]]:
+    """Agrupa toda campanha descoberta em ARQUIVOS PARA DISPAROS/ pela data embutida no
+    nome do arquivo (`^(\\d{4})(\\d{2})(\\d{2})`, mesmo padrão usado nos decks .pptx —
+    ver CLAUDE.md) — não pelo campo `data` do retorno, que fica NaT pra campanha ainda
+    sem retorno casado. Canal/fornecedor vêm de `canal_da_campanha`/`fornecedor_da_campanha`;
+    volume e Grupo Estratégico predominante vêm do próprio disparo (`carregar_dados_sms`,
+    a fonte de verdade de composição por grupo — nunca um cross-tab de retorno/CRM)."""
+    campanhas = descobrir_campanhas()
+    if not campanhas:
+        return {}
+    df = carregar_dados_sms()
 
-
-def salvar_jornada_cobranca(registros: list[dict]) -> None:
-    """Grava a jornada de cobrança (editada direto na tabela da aba) de
-    volta em JORNADA_COBRANCA.csv."""
-    _ARQUIVO_JORNADA_COBRANCA.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(registros, columns=COLUNAS_JORNADA_COBRANCA).fillna("")
-    df.to_csv(_ARQUIVO_JORNADA_COBRANCA, index=False, encoding="utf-8-sig")
-
-
-_CANAL_LABEL_PARA_CHAVE = {v.lower(): k for k, v in CANAL_CUSTO_LABEL.items()}
-_FORNECEDOR_LABEL_PARA_CHAVE = {v.lower(): k for k, v in FORNECEDOR_CUSTO_LABEL.items()}
-
-
-def calcular_custo_jornada_por_utm(
-    registros_jornada: list[dict], df_sms: pd.DataFrame, df_rcs: pd.DataFrame,
-    df_whatsapp_otima: pd.DataFrame, df_whatsapp_airys: pd.DataFrame,
-) -> list[dict]:
-    """Calculadora interativa da Jornada de Cobrança: usa a(s) UTM(s) digitada(s) em
-    cada teste — o mesmo identificador da pasta ARQUIVOS PARA DISPAROS — pra buscar o
-    Total Disparado direto do arquivo de disparo (`total_disparado_campanhas`, ground
-    truth, sem depender de casar por data) e a quantidade cobrada, calculada dos dados
-    reais de retorno daquela(s) UTM(s) conforme a base de cobrança do fornecedor
-    (`CUSTO_CONFIG_POR_CANAL_FORNECEDOR`). Recalcula a cada edição/linha nova/linha
-    removida, sem precisar salvar. Email não tem telefone no arquivo de disparo (fica
-    sem Total Disparado); fornecedor com mais de um nome (célula tipo "Ótima e Airys")
-    ou sem custo confirmado fica sem custo — sem inventar a proporção entre eles."""
-    resultado = []
-    for registro in registros_jornada:
-        utms = [u.strip() for u in (registro.get("UTM(s)") or "").split(",") if u.strip()]
-        canal_chave = _CANAL_LABEL_PARA_CHAVE.get((registro.get("Canal") or "").strip().lower())
-        fornecedores_texto = [
-            p.strip().lower() for p in re.split(r"\s+e\s+|,", registro.get("Fornecedor") or "") if p.strip()
-        ]
-        fornecedor_chave = (
-            _FORNECEDOR_LABEL_PARA_CHAVE.get(fornecedores_texto[0]) if len(fornecedores_texto) == 1 else None
-        )
-
-        if not utms or canal_chave is None:
-            resultado.append({
-                "total_disparado": None, "base_cobranca": None, "quantidade_cobrada": None,
-                "custo_unitario": None, "custo": None,
-            })
+    resultado: dict[str, list[dict]] = {}
+    for utm in campanhas:
+        m = _PADRAO_DATA_UTM.match(utm)
+        if not m:
             continue
-
-        total_disparado = None if canal_chave == "email" else total_disparado_campanhas(utms)
-
-        config = CUSTO_CONFIG_POR_CANAL_FORNECEDOR.get((canal_chave, fornecedor_chave))
-        if config is None:
-            resultado.append({
-                "total_disparado": total_disparado, "base_cobranca": None, "quantidade_cobrada": None,
-                "custo_unitario": None, "custo": None,
-            })
-            continue
-
-        if canal_chave == "sms":
-            subset = filtrar_dados(df_sms, utms=utms)
-            quantidades = {
-                "disparado": int(subset["disparado"].sum()), "enviado": int(subset["enviado"].sum()),
-                "entregue": int(subset["entregue"].sum()),
-            }
-        elif canal_chave == "rcs":
-            subset = filtrar_dados(df_rcs, utms=utms)
-            quantidades = {
-                "disparado": int(subset["disparado"].sum()), "enviado": int(subset["enviado"].sum()),
-                "entregue": int(subset["entregue"].sum()),
-            }
-        else:
-            df_fonte = df_whatsapp_otima if fornecedor_chave == "otima" else df_whatsapp_airys
-            subset = filtrar_dados_whatsapp(df_fonte, utms=utms, canal="whatsapp")
-            quantidades = {
-                "disparado": len(subset),
-                "enviado": int((subset["situacao_norm"] != "Nao Enviado").sum()),
-                "entregue": int(subset["situacao_norm"].isin(["Entregue", "Lido"]).sum()),
-            }
-
-        quantidade_cobrada = quantidades[config["base"]]
-        resultado.append({
-            "total_disparado": total_disparado, "base_cobranca": config["base"],
-            "quantidade_cobrada": quantidade_cobrada,
-            "custo_unitario": config["custo_unitario"], "custo": quantidade_cobrada * config["custo_unitario"],
+        data_iso = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        sub = df[df["utm_campaign"] == utm] if not df.empty else df
+        volume = len(sub)
+        grupo = NAO_CLASSIFICADO
+        frase = None
+        if volume:
+            contagem_grupo = sub["grupo_estrategico"].value_counts()
+            if not contagem_grupo.empty:
+                grupo = contagem_grupo.index[0]
+            if "frase" in sub.columns:
+                validas = sub["frase"].dropna()
+                validas = validas[validas.astype(str).str.strip() != ""]
+                if not validas.empty:
+                    frase = validas.iloc[0]
+        resultado.setdefault(data_iso, []).append({
+            "utm": utm,
+            "canal": CANAL_CUSTO_LABEL.get(canal_da_campanha(utm), "Desconhecido"),
+            "fornecedor": FORNECEDOR_CUSTO_LABEL.get(fornecedor_da_campanha(utm), fornecedor_da_campanha(utm)),
+            "grupo_estrategico": grupo,
+            "volume": volume,
+            "frase": frase,
         })
+
+    for lista in resultado.values():
+        lista.sort(key=lambda c: c["utm"])
     return resultado
+
+
+def carregar_anotacoes_calendario() -> dict[str, str]:
+    """Anotações livres por dia do Calendário de Estratégia (chave = data ISO), lidas
+    de ANOTACOES_CALENDARIO.json. Arquivo ainda não existente = sem anotações."""
+    if not _ARQUIVO_ANOTACOES_CALENDARIO.exists():
+        return {}
+    try:
+        return json.loads(_ARQUIVO_ANOTACOES_CALENDARIO.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def salvar_anotacoes_calendario(anotacoes: dict[str, str]) -> None:
+    """Mescla `anotacoes` (data ISO -> texto) nas já salvas e grava de volta em
+    ANOTACOES_CALENDARIO.json — mescla em vez de sobrescrever pra não apagar
+    anotações de outros meses que não estavam na tela no momento de salvar."""
+    atuais = carregar_anotacoes_calendario()
+    atuais.update(anotacoes)
+    atuais = {data: texto for data, texto in atuais.items() if (texto or "").strip()}
+    _ARQUIVO_ANOTACOES_CALENDARIO.parent.mkdir(parents=True, exist_ok=True)
+    _ARQUIVO_ANOTACOES_CALENDARIO.write_text(
+        json.dumps(atuais, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8",
+    )

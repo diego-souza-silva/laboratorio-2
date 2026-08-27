@@ -4,17 +4,17 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
-from dash import Input, Output, State, ctx, dash_table, html
+from dash import ALL, Input, Output, State, ctx, dash_table, html
 
 import charts
 import layout
 from data_processing import (
-    BASE_COBRANCA_LABEL, COLUNAS_JORNADA_COBRANCA, agregar_crm_por_campanha,
+    BASE_COBRANCA_LABEL, agregar_crm_por_campanha,
     agregar_crm_por_grupo_ab,
     agregar_crm_por_grupo_estrategico, agregar_por_campanha, agregar_por_grupo_ab,
     agregar_por_grupo_estrategico, agregar_frase_com_crm, agregar_mensagem_whatsapp_com_crm,
     agregar_resultado_resposta_airys, agregar_whatsapp_por_campanha, agregar_whatsapp_por_grupo_ab,
-    agregar_whatsapp_por_grupo_estrategico, calcular_custo_jornada_por_utm, calcular_custo_total_por_canal,
+    agregar_whatsapp_por_grupo_estrategico, calcular_custo_total_por_canal,
     calcular_custos_disparo,
     calcular_funil,
     calcular_funil_combinado_email_salesforce,
@@ -23,10 +23,10 @@ from data_processing import (
     calcular_kpis_whatsapp, campanhas_escopo, canal_da_campanha, carregar_dados_airys,
     carregar_dados_crm, carregar_dados_email_salesforce, carregar_dados_rcs,
     carregar_dados_rcs_estilo_sms, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    carregar_jornada_cobranca, extremos_data_hora, filtrar_dados, filtrar_dados_whatsapp,
-    fornecedor_da_campanha, ler_diario_estrategia, montar_pivot_crm, montar_tabela_frase_com_grupo,
+    extremos_data_hora, filtrar_dados, filtrar_dados_whatsapp,
+    fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
     montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
-    salvar_diario_estrategia, salvar_jornada_cobranca, total_disparado_campanhas,
+    salvar_anotacoes_calendario, total_disparado_campanhas,
 )
 from utils import formatar_numero, formatar_percentual, taxa
 
@@ -77,12 +77,6 @@ COLUNAS_TABELA_CUSTOS = [
     "Data", "Canal", "Fornecedor", "Base de Cobrança", "Quantidade", "% Quantidade",
     "Custo Unitário", "Custo Total", "% Custo Total",
 ]
-
-COLUNAS_TABELA_JORNADA_CUSTO = [
-    "Data", "Teste", "Canal", "Fornecedor", "UTM(s)", "Total Disparado", "Base de Cobrança",
-    "Quantidade Cobrada", "% sobre Disparado", "Custo Unitário", "Custo Estimado",
-]
-
 
 def _tabela_funil_html(etapas: list[dict]) -> list:
     cabecalho = html.Div([
@@ -319,7 +313,7 @@ def _tabela_texto_grupo_component(linhas: list[dict], mapa_label: dict, titulo_c
 
 
 def registrar_callbacks(app):
-    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "custos", "diario", "jornada"]
+    ABAS = ["sms", "grupo", "grupo-estrategico", "crm", "custos", "calendario"]
 
     @app.callback(
         [Output(f"painel-tab-{aba}", "style") for aba in ABAS],
@@ -337,74 +331,43 @@ def registrar_callbacks(app):
         return (*estilos, *classes)
 
     @app.callback(
-        Output("status-salvar-diario", "children"),
-        Input("btn-salvar-diario", "n_clicks"),
-        State("editor-diario", "value"),
+        Output("calendario-grid-container", "children"),
+        Output("calendario-mes-label", "children"),
+        Input("calendario-ano-mes", "data"),
+    )
+    def renderizar_calendario(ano_mes):
+        ano, mes = ano_mes["ano"], ano_mes["mes"]
+        grade = layout.montar_grade_calendario(ano, mes)
+        return grade, f"{layout.MESES_LABEL[mes]} {ano}"
+
+    @app.callback(
+        Output("calendario-ano-mes", "data"),
+        Input("btn-calendario-mes-anterior", "n_clicks"),
+        Input("btn-calendario-mes-seguinte", "n_clicks"),
+        State("calendario-ano-mes", "data"),
         prevent_initial_call=True,
     )
-    def salvar_diario(_n_clicks, conteudo):
-        salvar_diario_estrategia(conteudo)
+    def navegar_calendario(_n_anterior, _n_seguinte, ano_mes):
+        ano, mes = ano_mes["ano"], ano_mes["mes"]
+        mes += -1 if ctx.triggered_id == "btn-calendario-mes-anterior" else 1
+        if mes < 1:
+            ano, mes = ano - 1, 12
+        elif mes > 12:
+            ano, mes = ano + 1, 1
+        return {"ano": ano, "mes": mes}
+
+    @app.callback(
+        Output("status-salvar-calendario", "children"),
+        Input("btn-salvar-calendario", "n_clicks"),
+        State({"type": "anotacao-calendario-dia", "data": ALL}, "value"),
+        State({"type": "anotacao-calendario-dia", "data": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+    def salvar_calendario(_n_clicks, valores, ids):
+        anotacoes = {item["data"]: (valor or "") for item, valor in zip(ids, valores)}
+        salvar_anotacoes_calendario(anotacoes)
         agora = dt.datetime.now().strftime("%H:%M:%S")
         return f"Salvo às {agora}"
-
-    @app.callback(
-        Output("tabela-jornada-cobranca", "data", allow_duplicate=True),
-        Input("btn-add-linha-jornada", "n_clicks"),
-        State("tabela-jornada-cobranca", "data"),
-        prevent_initial_call=True,
-    )
-    def adicionar_linha_jornada(_n_clicks, linhas):
-        linhas = list(linhas or [])
-        linhas.append({coluna: "" for coluna in COLUNAS_JORNADA_COBRANCA})
-        return linhas
-
-    @app.callback(
-        Output("status-salvar-jornada", "children"),
-        Input("btn-salvar-jornada", "n_clicks"),
-        State("tabela-jornada-cobranca", "data"),
-        prevent_initial_call=True,
-    )
-    def salvar_jornada(_n_clicks, linhas):
-        salvar_jornada_cobranca(linhas or [])
-        agora = dt.datetime.now().strftime("%H:%M:%S")
-        return f"Salvo às {agora}"
-
-    @app.callback(
-        Output("tabela-jornada-custo-container", "children"),
-        Input("tabela-jornada-cobranca", "data"),
-    )
-    def atualizar_calculadora_jornada(linhas_jornada):
-        linhas_jornada = linhas_jornada or []
-        custos = calcular_custo_jornada_por_utm(
-            linhas_jornada, carregar_dados_sms(), carregar_dados_rcs_estilo_sms(),
-            carregar_dados_whatsapp_mensagem(), carregar_dados_airys(),
-        )
-        registros = [
-            {
-                "Data": linha.get("Data", ""),
-                "Teste": linha.get("Teste", ""),
-                "Canal": linha.get("Canal", ""),
-                "Fornecedor": linha.get("Fornecedor", ""),
-                "UTM(s)": linha.get("UTM(s)", ""),
-                "Total Disparado": (
-                    formatar_numero(c["total_disparado"]) if c["total_disparado"] is not None else "—"
-                ),
-                "Base de Cobrança": BASE_COBRANCA_LABEL.get(c["base_cobranca"], "—"),
-                "Quantidade Cobrada": (
-                    formatar_numero(c["quantidade_cobrada"]) if c["quantidade_cobrada"] is not None else "—"
-                ),
-                "% sobre Disparado": (
-                    formatar_percentual(taxa(c["quantidade_cobrada"], c["total_disparado"]))
-                    if c["quantidade_cobrada"] is not None and c["total_disparado"] else "—"
-                ),
-                "Custo Unitário": (
-                    charts.formatar_reais(c["custo_unitario"], casas=4) if c["custo_unitario"] is not None else "—"
-                ),
-                "Custo Estimado": charts.formatar_reais(c["custo"]) if c["custo"] is not None else "—",
-            }
-            for linha, c in zip(linhas_jornada, custos)
-        ]
-        return _tabela_component(registros, COLUNAS_TABELA_JORNADA_CUSTO)
 
     @app.callback(
         Output("canal-crm-ativo", "data"),
