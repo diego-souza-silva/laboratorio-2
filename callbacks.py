@@ -342,19 +342,24 @@ def registrar_callbacks(app):
 
     @app.callback(
         Output("calendario-ano-mes", "data"),
+        Output("calendario-ir-para-mes", "value"),
         Input("btn-calendario-mes-anterior", "n_clicks"),
         Input("btn-calendario-mes-seguinte", "n_clicks"),
+        Input("calendario-ir-para-mes", "value"),
         State("calendario-ano-mes", "data"),
         prevent_initial_call=True,
     )
-    def navegar_calendario(_n_anterior, _n_seguinte, ano_mes):
-        ano, mes = ano_mes["ano"], ano_mes["mes"]
-        mes += -1 if ctx.triggered_id == "btn-calendario-mes-anterior" else 1
-        if mes < 1:
-            ano, mes = ano - 1, 12
-        elif mes > 12:
-            ano, mes = ano + 1, 1
-        return {"ano": ano, "mes": mes}
+    def navegar_calendario(_n_anterior, _n_seguinte, mes_selecionado, ano_mes):
+        if ctx.triggered_id == "calendario-ir-para-mes":
+            ano, mes = (int(p) for p in mes_selecionado.split("-"))
+        else:
+            ano, mes = ano_mes["ano"], ano_mes["mes"]
+            mes += -1 if ctx.triggered_id == "btn-calendario-mes-anterior" else 1
+            if mes < 1:
+                ano, mes = ano - 1, 12
+            elif mes > 12:
+                ano, mes = ano + 1, 1
+        return {"ano": ano, "mes": mes}, f"{ano:04d}-{mes:02d}"
 
     @app.callback(
         Output("status-salvar-calendario", "children"),

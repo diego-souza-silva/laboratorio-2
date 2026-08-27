@@ -1054,17 +1054,35 @@ def _aba_calendario() -> html.Div:
             color="info", className="mb-3",
         ),
         html.Div([
-            dbc.Button("‹", id="btn-calendario-mes-anterior", color="secondary", size="sm", className="me-2"),
+            dbc.Button(
+                [html.I(className="bi bi-chevron-left me-2"), "Mês Anterior"],
+                id="btn-calendario-mes-anterior", color="secondary", className="calendario-btn-nav me-2",
+            ),
             html.Span(
                 id="calendario-mes-label",
-                style={"minWidth": "170px", "textAlign": "center", "display": "inline-block"},
+                style={"minWidth": "170px", "textAlign": "center", "fontSize": "1.15rem"},
                 className="fw-bold",
             ),
-            dbc.Button("›", id="btn-calendario-mes-seguinte", color="secondary", size="sm", className="ms-2"),
+            dbc.Button(
+                ["Mês Seguinte", html.I(className="bi bi-chevron-right ms-2")],
+                id="btn-calendario-mes-seguinte", color="secondary", className="calendario-btn-nav ms-2",
+            ),
+            html.Div([
+                html.Label("Ir para o mês", className="rotulo-filtro d-block mb-1"),
+                dcc.Dropdown(
+                    id="calendario-ir-para-mes",
+                    options=[
+                        {"label": f"{MESES_LABEL[m]} 2026", "value": f"2026-{m:02d}"} for m in range(7, 13)
+                    ],
+                    value=f"{ano_inicial:04d}-{mes_inicial:02d}" if 7 <= mes_inicial <= 12 else None,
+                    clearable=False, searchable=False,
+                    className="dash-dropdown-escuro", style={"minWidth": "200px"},
+                ),
+            ], className="ms-4"),
             html.Div(style={"flex": "1"}),
             dbc.Button("Salvar Anotações", id="btn-salvar-calendario", color="primary"),
             html.Span(id="status-salvar-calendario", className="legenda-registros ms-3"),
-        ], className="d-flex align-items-center mb-3"),
+        ], className="d-flex align-items-end mb-3"),
         dcc.Store(id="calendario-ano-mes", data={"ano": ano_inicial, "mes": mes_inicial}),
         html.Div(id="calendario-grid-container"),
     ])
