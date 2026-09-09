@@ -1,7 +1,10 @@
 """Carga, limpeza e padronização dos dados de SMS da operação Casas Bahia.
 
 Fontes — 4 pastas na raiz do projeto, ao lado de app.py (as mesmas pastas usadas pela
-operação no dia a dia; basta soltar arquivo novo dentro e reiniciar o app):
+operação no dia a dia; basta soltar arquivo novo dentro e reiniciar o app). Cada pasta
+pode organizar os arquivos em subpastas por mês ("MES 7", "MES 8", ...) — todo `.glob`
+abaixo é recursivo (`rglob`), então a subpasta é só organização, não afeta a leitura;
+o nome do arquivo (e não a subpasta em que está) é o que determina UTM/campanha/mês:
   - `ARQUIVOS PARA DISPAROS/{utm}.csv` -> base enviada à plataforma (telefone;FRASE) =
     "Disparado". O nome do arquivo (sem extensão) é a própria UTM da campanha.
   - `ARQUIVOS DE RETORNO/*.csv` -> retorno da Kolmeya/Otima/etc (job;phone;status;
@@ -52,7 +55,7 @@ def descobrir_campanhas() -> dict[str, Path]:
     arquivo entregue) volta um dicionário vazio, não erro."""
     if not _DIR_DISPARO.exists():
         return {}
-    return {caminho.stem: caminho for caminho in sorted(_DIR_DISPARO.glob("*.csv"))}
+    return {caminho.stem: caminho for caminho in sorted(_DIR_DISPARO.rglob("*.csv"))}
 
 
 def campanhas_escopo() -> list[str]:
@@ -80,7 +83,7 @@ def vincular_retornos_a_campanhas(
     telefones_disparo = {utm: _telefones_do_arquivo(caminho, "telefone") for utm, caminho in campanhas.items()}
 
     vinculo: dict[str, Path] = {}
-    arquivos_retorno = sorted(_DIR_RETORNO.glob("*.csv")) if _DIR_RETORNO.exists() else []
+    arquivos_retorno = sorted(_DIR_RETORNO.rglob("*.csv")) if _DIR_RETORNO.exists() else []
     for retorno_path in arquivos_retorno:
         telefones_retorno = _telefones_do_arquivo(retorno_path, "phone")
         if not telefones_retorno:
@@ -374,7 +377,7 @@ def _carregar_base_segmentacao(forcar_reload: bool = False) -> pd.DataFrame:
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    arquivos = sorted(_DIR_BASE_GRUPO_AB.glob("*.csv")) if _DIR_BASE_GRUPO_AB.exists() else []
+    arquivos = sorted(_DIR_BASE_GRUPO_AB.rglob("*.csv")) if _DIR_BASE_GRUPO_AB.exists() else []
     if not arquivos:
         base = pd.DataFrame()
     else:
@@ -516,7 +519,7 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     if not forcar_reload and chave_cache in _cache:
         return _cache[chave_cache]
 
-    arquivos = sorted(_DIR_LOG_CRM.glob("*.csv")) if _DIR_LOG_CRM.exists() else []
+    arquivos = sorted(_DIR_LOG_CRM.rglob("*.csv")) if _DIR_LOG_CRM.exists() else []
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -570,7 +573,7 @@ def _carregar_retorno_estilo_otima(
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    arquivos = sorted(pasta.glob("*.csv")) if pasta.exists() else []
+    arquivos = sorted(pasta.rglob("*.csv")) if pasta.exists() else []
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -768,7 +771,7 @@ def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    arquivos = sorted(_DIR_RETORNO_WHATSAPP_AIRYS.glob("*.csv")) if _DIR_RETORNO_WHATSAPP_AIRYS.exists() else []
+    arquivos = sorted(_DIR_RETORNO_WHATSAPP_AIRYS.rglob("*.csv")) if _DIR_RETORNO_WHATSAPP_AIRYS.exists() else []
     partes = [ler_csv_auto(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
@@ -902,7 +905,7 @@ def carregar_dados_email_salesforce(forcar_reload: bool = False) -> pd.DataFrame
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    arquivos = sorted(_DIR_RETORNO_EMAIL_SALESFORCE.glob("*.xlsx")) if _DIR_RETORNO_EMAIL_SALESFORCE.exists() else []
+    arquivos = sorted(_DIR_RETORNO_EMAIL_SALESFORCE.rglob("*.xlsx")) if _DIR_RETORNO_EMAIL_SALESFORCE.exists() else []
     partes = [_parse_outline_email_salesforce(caminho) for caminho in arquivos]
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
