@@ -286,7 +286,15 @@ def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     # em 100% das linhas), zerando o volume da campanha inteira. Bug real encontrado
     # em 20260730-CBtopofunildia30-salesforce.csv (3.035 linhas descartadas).
     coluna_email = "email" if "email" in disparo.columns else ("email_1" if "email_1" in disparo.columns else None)
-    if "telefone" in disparo.columns:
+    if "sms_whats" in disparo.columns:
+        # Alguns disparos de WhatsApp/Airys trazem o telefone só em "sms_whats" (com
+        # DDI), sem a coluna "telefone" — mesma coluna que `telefones_das_campanhas` já
+        # prioriza pra ligar o retorno. Sem esse fallback, essas campanhas caíam no
+        # "desconhecido" e sumiam inteiras do disparo (mesmo bug de "email_1" acima).
+        # Bug real: 9 campanhas de WhatsApp Airys de setembro/2026 descartadas.
+        disparo["identificador_norm"] = disparo["sms_whats"].apply(_normalizar_telefone_com_ddi)
+        tipo = "telefone"
+    elif "telefone" in disparo.columns:
         disparo["identificador_norm"] = disparo["telefone"].apply(normalizar_telefone)
         tipo = "telefone"
     elif coluna_email:
