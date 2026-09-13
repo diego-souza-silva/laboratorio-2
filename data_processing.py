@@ -393,6 +393,8 @@ def _montar_mapa_telefone(base: pd.DataFrame, coluna_valor: str) -> dict:
     if base.empty or coluna_valor not in base.columns:
         return {}
     colunas_fone = [c for c in base.columns if c.startswith("fone_")]
+    if not colunas_fone:
+        return {}
     partes = [base[[coluna, coluna_valor]].rename(columns={coluna: "fone"}) for coluna in colunas_fone]
     longo = pd.concat(partes, ignore_index=True)
     longo["fone_norm"] = longo["fone"].apply(normalizar_telefone)
