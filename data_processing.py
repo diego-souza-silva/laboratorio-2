@@ -43,6 +43,7 @@ _DIR_RETORNO_WHATSAPP_AIRYS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO WHATSAPP AIRYS
 _DIR_RETORNO_RCS = RAIZ_PROJETO / "ARQUIVOS DE RETORNO RCS"
 _DIR_RETORNO_EMAIL_SALESFORCE = RAIZ_PROJETO / "ARQUIVOS DE RETORNO EMAIL SALESFORCE"
 _DIR_LOG_CRM = RAIZ_PROJETO / "ARQUIVOS LOG"
+_DIR_JEKINS = RAIZ_PROJETO / "JEKINS"
 _DIR_BASE_GRUPO_AB = RAIZ_PROJETO / "ARQUIVO DA BASE INTEIRA"
 _ARQUIVO_ANOTACOES_CALENDARIO = RAIZ_PROJETO / "ANOTACOES_CALENDARIO.json"
 
@@ -62,6 +63,17 @@ def campanhas_escopo() -> list[str]:
     """Lista de UTMs em escopo, na ordem descoberta em disco — substitui a antiga
     constante `CAMPANHAS_ESCOPO` (fixa, calculada uma vez só no import)."""
     return list(descobrir_campanhas().keys())
+
+
+def descobrir_jekins() -> dict[str, Path]:
+    """Descobre os exports enriquecidos por cliente (CPF, Prioridade, Grupo
+    Estratégico, e-mail — sem o texto da frase) em `JEKINS/`, casados com o disparo
+    correspondente pelo nome do arquivo (mesmo stem = mesma UTM). Pasta opcional: só
+    complementa Prioridade/Grupo Estratégico quando o próprio arquivo de disparo não
+    já vem com essas colunas — ver uso em `_carregar_campanha`."""
+    if not _DIR_JEKINS.exists():
+        return {}
+    return {caminho.stem: caminho for caminho in sorted(_DIR_JEKINS.rglob("*.csv"))}
 
 
 def _telefones_do_arquivo(caminho: Path, coluna: str) -> set[str]:
@@ -289,7 +301,9 @@ def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     return disparo, tipo
 
 
-def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) -> pd.DataFrame:
+def _carregar_campanha(
+    utm: str, disparo_path: Path, retorno_path: Path | None, jekins_path: Path | None = None,
+) -> pd.DataFrame:
     disparo_bruto = ler_csv_auto(disparo_path)
     disparo, tipo_identificador = _preparar_disparo(disparo_bruto)
 
@@ -323,6 +337,35 @@ def _carregar_campanha(utm: str, disparo_path: Path, retorno_path: Path | None) 
         if grupo_inferido:
             grupo_estrategico_arquivo = disparo[["identificador_norm"]].copy()
             grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = grupo_inferido
+
+    # JEKINS/ (quando existe pra essa campanha, casado pelo nome do arquivo) é o
+    # export completo por cliente que alimentou o disparo — tem Prioridade e Grupo
+    # Estratégico já atribuídos na hora do disparo, mais confiável que recalcular pelo
+    # mapa de telefone da base de segmentação (que pode não cobrir todo mundo). Só
+    # complementa quando o próprio disparo não já veio com a coluna (ver comentário
+    # acima) — nunca sobrescreve o que já é fonte de verdade mais direta.
+    if jekins_path is not None and (grupo_ab_arquivo is None or grupo_estrategico_arquivo is None):
+        jekins = ler_csv_auto(jekins_path)
+        if "telefone" in jekins.columns:
+            jekins = jekins.copy()
+            jekins["identificador_norm"] = jekins["telefone"].apply(normalizar_telefone)
+            jekins = jekins[jekins["identificador_norm"] != ""].drop_duplicates("identificador_norm")
+
+            if grupo_ab_arquivo is None:
+                coluna_prioridade_jekins = _coluna_prioridade(jekins)
+                if coluna_prioridade_jekins:
+                    grupo_ab_arquivo = jekins[["identificador_norm", coluna_prioridade_jekins]].rename(
+                        columns={coluna_prioridade_jekins: "grupo_ab_arquivo"}
+                    )
+                    grupo_ab_arquivo["grupo_ab_arquivo"] = grupo_ab_arquivo["grupo_ab_arquivo"].str.upper()
+
+            if grupo_estrategico_arquivo is None and "grupo_estrategico" in jekins.columns:
+                grupo_estrategico_arquivo = jekins[["identificador_norm", "grupo_estrategico"]].rename(
+                    columns={"grupo_estrategico": "grupo_estrategico_arquivo"}
+                )
+                grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = (
+                    grupo_estrategico_arquivo["grupo_estrategico_arquivo"].str.upper()
+                )
 
     # A frase do SMS (com link único por cliente) vem do próprio arquivo de disparo,
     # disponível pra 100% das linhas — diferente da "mensagem" do retorno, que só
@@ -463,8 +506,12 @@ def carregar_dados_sms(forcar_reload: bool = False) -> pd.DataFrame:
         return df
 
     vinculos = vincular_retornos_a_campanhas(campanhas)
+    jekins = descobrir_jekins()
     df = pd.concat(
-        [_carregar_campanha(utm, caminho, vinculos.get(utm)) for utm, caminho in campanhas.items()],
+        [
+            _carregar_campanha(utm, caminho, vinculos.get(utm), jekins.get(utm))
+            for utm, caminho in campanhas.items()
+        ],
         ignore_index=True,
     )
     df["status_funil"] = df["status_raw"].map(_STATUS_MAPA).fillna("Outro")
