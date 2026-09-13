@@ -377,7 +377,17 @@ def _carregar_base_segmentacao(forcar_reload: bool = False) -> pd.DataFrame:
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
-    arquivos = sorted(_DIR_BASE_GRUPO_AB.rglob("*.csv")) if _DIR_BASE_GRUPO_AB.exists() else []
+    # Ordena por mês numérico (não alfabético) da subpasta "MES N", já que o dedup por
+    # CPF abaixo usa keep="last" pra ficar com a linha mais recente — ordenação
+    # alfabética simples quebraria a partir de "MES 10" (viria antes de "MES 9").
+    def _chave_ordenacao(caminho: Path) -> tuple[int, str]:
+        m = re.search(r"MES (\d+)", str(caminho))
+        return (int(m.group(1)) if m else -1, str(caminho))
+
+    arquivos = sorted(
+        _DIR_BASE_GRUPO_AB.rglob("*.csv") if _DIR_BASE_GRUPO_AB.exists() else [],
+        key=_chave_ordenacao,
+    )
     if not arquivos:
         base = pd.DataFrame()
     else:
