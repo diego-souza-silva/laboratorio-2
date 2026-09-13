@@ -354,9 +354,24 @@ def _carregar_campanha(
     # acima) — nunca sobrescreve o que já é fonte de verdade mais direta.
     if jekins_path is not None and (grupo_ab_arquivo is None or grupo_estrategico_arquivo is None):
         jekins = ler_csv_auto(jekins_path)
-        if "telefone" in jekins.columns:
+        # A chave de cruzamento do JEKINS tem que ser a MESMA usada pelo disparo (ver
+        # `_preparar_disparo` acima) — telefone pra campanha de telefone, e-mail pra
+        # campanha de e-mail. Cruzar sempre por telefone (como antes) fazia o merge
+        # nunca bater pra disparo de e-mail (identificador_norm do disparo é e-mail, do
+        # JEKINS virava telefone) — toda campanha de e-mail ficava sem o ganho do
+        # JEKINS, mesmo com o arquivo tendo o Grupo Estratégico certinho.
+        jekins_coluna_id = None
+        if tipo_identificador == "telefone" and "telefone" in jekins.columns:
+            jekins_coluna_id = "telefone"
+        elif tipo_identificador == "email":
+            jekins_coluna_id = "email_1" if "email_1" in jekins.columns else ("email" if "email" in jekins.columns else None)
+
+        if jekins_coluna_id:
             jekins = jekins.copy()
-            jekins["identificador_norm"] = jekins["telefone"].apply(normalizar_telefone)
+            if tipo_identificador == "telefone":
+                jekins["identificador_norm"] = jekins[jekins_coluna_id].apply(normalizar_telefone)
+            else:
+                jekins["identificador_norm"] = jekins[jekins_coluna_id].fillna("").astype(str).str.strip().str.lower()
             jekins = jekins[jekins["identificador_norm"] != ""].drop_duplicates("identificador_norm")
 
             if grupo_ab_arquivo is None:
