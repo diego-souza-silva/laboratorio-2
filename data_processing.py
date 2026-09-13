@@ -817,59 +817,125 @@ _COLUNAS_VAZIAS_AIRYS = [
 ]
 
 
+_COLUNAS_NORMALIZADAS_AIRYS = [
+    "telefone_norm", "situacao_norm", "status_atual_label", "mensagem_norm",
+    "timestamp", "respondeu_apos_envio", "resultado_resposta_norm",
+]
+
+
+def _normalizar_retorno_airys_rico(df: pd.DataFrame) -> pd.DataFrame:
+    """Normaliza o export rico do Airys (AirysChat + Meta Graph API, com
+    `provider_message_id`/`enviado_em_brt`/`status_atual`/...) pro formato comum usado
+    por `carregar_dados_airys` — telefone vem de decodificar o `provider_message_id`
+    (ver `_extrair_telefone_wamid`), já que a coluna `numero_whatsapp` do export vem
+    truncada (notação científica do Excel)."""
+    df = df.drop_duplicates("provider_message_id")
+    mapa_grupo_ab = carregar_mapa_grupo_ab()
+    resultado = pd.DataFrame(index=df.index)
+    resultado["telefone_norm"] = (
+        df["provider_message_id"].apply(_extrair_telefone_wamid)
+        .apply(lambda t: _reconstruir_telefone_airys(t, mapa_grupo_ab) if t else "")
+    )
+
+    status_norm = df["status_atual"].fillna("").str.strip().str.lower()
+    resultado["status_atual_label"] = status_norm.map(_STATUS_ATUAL_AIRYS_LABEL).fillna("Não Enviado")
+    resultado["situacao_norm"] = status_norm.map(
+        {"read": "Lido", "delivered": "Entregue", "sent": "Enviado"}
+    ).fillna("Nao Enviado")
+    falhou = df["falhou_ou_rejeitado"].fillna("").str.strip().str.lower() == "sim"
+    resultado.loc[falhou, "situacao_norm"] = "Nao Entregue"
+    resultado.loc[falhou, "status_atual_label"] = "Falhou ou Rejeitado"
+
+    resultado["mensagem_norm"] = df["template_nome"].fillna("(sem template)")
+    resultado.loc[resultado["mensagem_norm"].astype(str).str.strip() == "", "mensagem_norm"] = "(sem template)"
+
+    resultado["respondeu_apos_envio"] = df["respondeu_apos_envio"].fillna("").str.strip().str.lower() == "sim"
+    resultado_resposta = df["resultado_resposta"].fillna("").str.strip()
+    resultado["resultado_resposta_norm"] = resultado_resposta.apply(
+        lambda v: _RESULTADO_RESPOSTA_AIRYS_LABEL.get(v, v) if v else "Sem Retorno"
+    )
+    resultado["timestamp"] = pd.to_datetime(df["enviado_em_brt"], errors="coerce")
+    return resultado[resultado["telefone_norm"] != ""]
+
+
+def _normalizar_retorno_airys_simples(df: pd.DataFrame) -> pd.DataFrame:
+    """Normaliza o export simples do Airys (colunas `Destino`/`Situacao`/`Disparado`/
+    `Entregue`/`Lido`/`Falhou`/`Respondeu` como Sim/Nao, sem `provider_message_id` nem
+    wamid — visto pela 1ª vez em setembro/2026) pro mesmo formato comum usado por
+    `carregar_dados_airys`. Diferente do export rico, aqui o telefone já vem completo
+    (com DDI) na coluna `Destino`, sem precisar decodificar nada — só tira o DDI."""
+    def _flag_sim(coluna: str) -> pd.Series:
+        if coluna not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[coluna].fillna("").astype(str).str.strip().str.lower() == "sim"
+
+    resultado = pd.DataFrame(index=df.index)
+    resultado["telefone_norm"] = df["destino"].apply(_normalizar_telefone_com_ddi)
+
+    lido, entregue, falhou, disparado = (
+        _flag_sim("lido"), _flag_sim("entregue"), _flag_sim("falhou"), _flag_sim("disparado")
+    )
+    situacao = pd.Series("Nao Enviado", index=df.index)
+    situacao[disparado] = "Enviado"
+    situacao[falhou] = "Nao Entregue"
+    situacao[entregue] = "Entregue"
+    situacao[lido] = "Lido"
+    resultado["situacao_norm"] = situacao
+    resultado["status_atual_label"] = situacao.map({
+        "Lido": "Lido", "Entregue": "Entregue", "Enviado": "Enviado",
+        "Nao Entregue": "Falhou ou Rejeitado", "Nao Enviado": "Não Enviado",
+    })
+
+    resultado["mensagem_norm"] = df["template"].fillna("(sem template)") if "template" in df.columns else "(sem template)"
+    resultado.loc[resultado["mensagem_norm"].astype(str).str.strip() == "", "mensagem_norm"] = "(sem template)"
+
+    resultado["timestamp"] = pd.to_datetime(df.get("data envio"), format="mixed", errors="coerce")
+    respondeu = _flag_sim("respondeu")
+    resultado["respondeu_apos_envio"] = respondeu
+    # Sem "resultado da resposta" nesse formato (só o flag Sim/Nao) -- "Sem Retorno" é
+    # o mesmo default já usado pelo export rico quando o campo vem vazio.
+    resultado["resultado_resposta_norm"] = respondeu.map({True: "Respondeu"}).fillna("Sem Retorno")
+    return resultado[resultado["telefone_norm"] != ""]
+
+
 def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
-    """Carrega o retorno do Airys (AirysChat + Meta Graph API) em `ARQUIVOS DE RETORNO
-    WHATSAPP AIRYS/` — granularidade por destinatário/mensagem, com status detalhado
-    (Entregue/Lido/Enviado/Falhou ou Rejeitado), resposta do cliente (Respondeu após
-    Envio, Resultado da Resposta) e template. O telefone vem de decodificar o
-    `provider_message_id` (ver `_extrair_telefone_wamid`) — a coluna `numero_whatsapp`
-    do export vem truncada. O status é traduzido pro mesmo vocabulário usado no
-    WhatsApp Otima (Entregue/Lido/Enviado/Não Entregue/Não Enviado), reaproveitando
-    toda a agregação/gráficos/tabelas já feitos pra esse formato."""
+    """Carrega o retorno do Airys em `ARQUIVOS DE RETORNO WHATSAPP AIRYS/` —
+    granularidade por destinatário/mensagem, com status detalhado (Entregue/Lido/
+    Enviado/Falhou ou Rejeitado), resposta do cliente (Respondeu após Envio, Resultado
+    da Resposta) e template. Convive com 2 formatos de export vistos até agora (ver
+    `_normalizar_retorno_airys_rico`/`_normalizar_retorno_airys_simples`, escolhidos
+    por arquivo pelas colunas presentes) — cada um normalizado pro mesmo formato comum
+    antes de concatenar, então o resto da função (mapeamento de Prioridade/Grupo
+    Estratégico, data/hora) é o mesmo não importa a origem. O status é traduzido pro
+    mesmo vocabulário usado no WhatsApp Otima (Entregue/Lido/Enviado/Não Entregue/Não
+    Enviado), reaproveitando toda a agregação/gráficos/tabelas já feitos pra esse
+    formato."""
     chave = "airys"
     if not forcar_reload and chave in _cache:
         return _cache[chave]
 
     arquivos = sorted(_DIR_RETORNO_WHATSAPP_AIRYS.rglob("*.csv")) if _DIR_RETORNO_WHATSAPP_AIRYS.exists() else []
-    partes = [ler_csv_auto(caminho) for caminho in arquivos]
+    partes = []
+    for caminho in arquivos:
+        bruto = ler_csv_auto(caminho)
+        if "provider_message_id" in bruto.columns:
+            partes.append(_normalizar_retorno_airys_rico(bruto))
+        elif "destino" in bruto.columns:
+            partes.append(_normalizar_retorno_airys_simples(bruto))
+        # Formato desconhecido: ignora o arquivo em vez de quebrar o carregamento dos
+        # demais -- mesmo espírito do resto do módulo (nunca inventar dado, e uma
+        # fonte com formato novo não deve derrubar as que já funcionam).
+
     df = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame()
     if df.empty:
         df = pd.DataFrame(columns=_COLUNAS_VAZIAS_AIRYS)
         _cache[chave] = df
         return df
 
-    if "provider_message_id" in df.columns:
-        df = df.drop_duplicates("provider_message_id")
-
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
-    df["telefone_norm"] = (
-        df["provider_message_id"].apply(_extrair_telefone_wamid)
-        .apply(lambda t: _reconstruir_telefone_airys(t, mapa_grupo_ab) if t else "")
-    )
-    df = df[df["telefone_norm"] != ""]
-
-    status_norm = df["status_atual"].fillna("").str.strip().str.lower()
-    df["status_atual_label"] = status_norm.map(_STATUS_ATUAL_AIRYS_LABEL).fillna("Não Enviado")
-    df["situacao_norm"] = status_norm.map(
-        {"read": "Lido", "delivered": "Entregue", "sent": "Enviado"}
-    ).fillna("Nao Enviado")
-    falhou = df["falhou_ou_rejeitado"].fillna("").str.strip().str.lower() == "sim"
-    df.loc[falhou, "situacao_norm"] = "Nao Entregue"
-    df.loc[falhou, "status_atual_label"] = "Falhou ou Rejeitado"
-
-    df["mensagem_norm"] = df["template_nome"].fillna("(sem template)")
-    df.loc[df["mensagem_norm"].astype(str).str.strip() == "", "mensagem_norm"] = "(sem template)"
-
-    df["respondeu_apos_envio"] = df["respondeu_apos_envio"].fillna("").str.strip().str.lower() == "sim"
-    resultado_norm = df["resultado_resposta"].fillna("").str.strip()
-    df["resultado_resposta_norm"] = resultado_norm.apply(
-        lambda v: _RESULTADO_RESPOSTA_AIRYS_LABEL.get(v, v) if v else "Sem Retorno"
-    )
-
-    df["timestamp"] = pd.to_datetime(df["enviado_em_brt"], errors="coerce")
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
     df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
     mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
     df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
