@@ -379,7 +379,7 @@ def _carregar_campanha(
     # mapa de telefone da base de segmentação (que pode não cobrir todo mundo). Só
     # complementa quando o próprio disparo não já veio com a coluna (ver comentário
     # acima) — nunca sobrescreve o que já é fonte de verdade mais direta.
-    if jekins_path is not None and (grupo_ab_arquivo is None or grupo_estrategico_arquivo is None):
+    if jekins_path is not None:
         jekins = ler_csv_auto(jekins_path)
         # A chave de cruzamento do JEKINS tem que ser a MESMA usada pelo disparo (ver
         # `_preparar_disparo` acima) — telefone pra campanha de telefone, e-mail pra
@@ -416,6 +416,17 @@ def _carregar_campanha(
                 grupo_estrategico_arquivo["grupo_estrategico_arquivo"] = (
                     grupo_estrategico_arquivo["grupo_estrategico_arquivo"].str.upper()
                 )
+
+            # Disparo por e-mail não tem telefone próprio (`_preparar_disparo` zera
+            # `telefone_norm`), mas o JEKINS da campanha traz o telefone do mesmo
+            # cliente (mesma linha, join por e-mail) -- sem isso, e-mail nunca cruzava
+            # com o log de CRM (que só casa por telefone), mesmo quando o telefone
+            # existia e estava disponível. Só preenche quem o JEKINS realmente cobre;
+            # quem sobrar sem telefone continua de fora do cruzamento (não inventa).
+            if tipo_identificador == "email" and "telefone" in jekins.columns:
+                mapa_telefone_email = jekins.set_index("identificador_norm")["telefone"].apply(normalizar_telefone)
+                telefone_via_jekins = disparo["identificador_norm"].map(mapa_telefone_email)
+                disparo["telefone_norm"] = telefone_via_jekins.fillna("")
 
     # A frase do SMS (com link único por cliente) vem do próprio arquivo de disparo,
     # disponível pra 100% das linhas — diferente da "mensagem" do retorno, que só
