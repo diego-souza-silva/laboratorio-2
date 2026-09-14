@@ -224,6 +224,27 @@ cpf/telefone/nome/email — nada bate com ip/utm_cus). O piso de Home
 continua valendo (seção acima) — o fix de dedup só corrige a contagem bruta
 de eventos, não a identificação.
 
+### Retorno de WhatsApp/RCS: cliente único, não linha de mensagem
+`calcular_kpis_whatsapp`, `_agregar_whatsapp_por` e `agregar_mensagem_whatsapp`
+contavam **linhas** do retorno (uma por mensagem enviada), não
+`telefone_norm.nunique()` — mesmo problema do funil de CRM (seção acima),
+agora no lado do retorno/disparo. Um telefone que recebeu mais de uma
+mensagem na mesma campanha (reenvio, ou duas peças diferentes) era contado
+mais de uma vez em Disparado/Enviado/Entregue/Lido. Achado real: WhatsApp
+Airys de setembro tinha 5.797 linhas de retorno pra só 5.753 telefones
+únicos (o mesmo 5.753 já usado em "Clientes únicos" no Panorama/
+Consolidado) — o funil do canal mostrava "Disparado" diferente do resto do
+deck.
+
+Corrigido com `_deduplicar_melhor_status_whatsapp()`: fica uma linha por
+telefone (ordem Lido > Entregue > Enviado > Não Entregue > Não Enviado —
+o melhor status alcançado), exceto na tabela por mensagem-modelo
+(`agregar_mensagem_whatsapp`), onde a chave é `[telefone, mensagem]`: o
+mesmo cliente recebendo dois **textos diferentes** é legítimo e conta nas
+duas linhas — só reenvio do mesmo texto pro mesmo cliente não deve dobrar.
+11 dos 44 telefones duplicados de setembro tinham status diferente entre
+as duas linhas (ex.: Entregue numa, Lido na outra) — ficam como Lido.
+
 ### WhatsApp Airys: gap de casamento de telefone
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
 batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanhas`)
