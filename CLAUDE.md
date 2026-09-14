@@ -245,6 +245,39 @@ duas linhas — só reenvio do mesmo texto pro mesmo cliente não deve dobrar.
 11 dos 44 telefones duplicados de setembro tinham status diferente entre
 as duas linhas (ex.: Entregue numa, Lido na outra) — ficam como Lido.
 
+### Home no funil combinado: mostrar como evento bruto, não como "0"
+Decisão de produto (pedida explicitamente pelo usuário, não descoberta por
+investigação): em vez de mostrar Home como 0 clientes identificados (o que
+é tecnicamente correto pro cruzamento por telefone, mas faz o funil
+parecer quebrado — Auth/Oferta maiores que Home, ou Home "sumido"),
+`contagem_home_bruto(crm_all, utms)` conta os eventos "home" já
+deduplicados (mesma dedup de `carregar_dados_crm`, ver seção acima) **sem
+exigir telefone no escopo** — SMS 74, WhatsApp 3.167 em setembro. Isso
+NÃO é cliente único como as outras etapas — é visita/evento bruto, e todo
+lugar que mostra esse número precisa dizer isso explicitamente (rodapé:
+"Home (N) é evento bruto, não cliente identificado").
+
+Com esse número, o funil completo (`sms_funil_combinado`,
+`wpp_funil_completo`) fica monotonicamente decrescente e toda % de etapa
+anterior fica calculável (sem mais "—" na transição Home→Autenticação) —
+efeito colateral desejado, não coincidência: o "—" só aparecia porque
+Home (clientes únicos) ficava menor que Auth/Oferta (que são quase 100%
+identificados); usando o total bruto de visitas, Home volta a ser a maior
+etapa do funil de negociação, como um funil de verdade.
+
+Nas tabelas por Prioridade/Grupo Estratégico (`agregar_crm_por_grupo_ab/
+estrategico`), Home **nunca** é distribuído entre os grupos reais — não
+tem telefone pra sustentar isso. `mesclar_home_bruto_por_grupo()` zera o
+Home de cada grupo real e soma o total bruto numa linha própria
+"Não Classificado (só Home)", com Disparado/Entregue mostrados como "—"
+(não existe base de disparo pra esse número). Mesmo tratamento na
+Fraseologia SMS (`sms_frase`/`sms_frase_por_ab`, único texto do mês —
+Home bruto = total da campanha). Fraseologia por mensagem do WhatsApp
+(`agregar_mensagem_whatsapp`) **não** recebeu esse tratamento (não pedido)
+— continua mostrando Home por telefone identificado e "—" quando
+Auth/Oferta excede esse Home menor, mesma leitura da seção "piso de Home"
+acima. Email também não recebeu esse tratamento.
+
 ### WhatsApp Airys: gap de casamento de telefone
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
 batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanhas`)

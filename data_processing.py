@@ -2017,6 +2017,43 @@ def contagem_crm_unicos(df: pd.DataFrame) -> dict:
     }
 
 
+def contagem_home_bruto(crm_all: pd.DataFrame, utms: list[str]) -> int:
+    """Quantidade de eventos "home" (já deduplicados dentro de `carregar_dados_crm`
+    -- ver CLAUDE.md sobre a chave de dedup com `ip`) pras campanhas dadas, SEM
+    exigir telefone no escopo (Home nunca tem telefone/CPF, é evento
+    pré-autenticação -- diferente de auth/oferta/acordo, que exigem telefone
+    confirmado na lista de disparo da campanha via `contagem_crm_unicos`). Isso é
+    contagem de EVENTOS/VISITAS, não de clientes únicos identificados -- nunca
+    rotular como "clientes" sem essa ressalva."""
+    if crm_all.empty:
+        return 0
+    sub = crm_all[(crm_all["utm_campaign"].isin(utms)) & (crm_all["acao_norm"] == "home")]
+    return len(sub)
+
+
+def mesclar_home_bruto_por_grupo(
+    tabela: list[dict], coluna: str, crm_all: pd.DataFrame, utms: list[str],
+) -> list[dict]:
+    """Funde a contagem bruta de "home" (ver `contagem_home_bruto`) numa tabela por
+    grupo_ab/grupo_estrategico já montada (`agregar_crm_por_grupo_ab/estrategico`,
+    lista de dicts). Nunca distribui Home entre os grupos reais -- eles não têm
+    telefone pra ligar a nenhum, então toda linha com "home" > 0 na tabela original
+    vira 0 (não existe telefone que sustente esse número num grupo específico) e o
+    total bruto de Home entra como uma linha `NAO_CLASSIFICADO` à parte (nova, se
+    ainda não existir)."""
+    sub = crm_all[(crm_all["utm_campaign"].isin(utms)) & (crm_all["acao_norm"] == "home")] if not crm_all.empty else crm_all
+    home_total = len(sub) if not crm_all.empty else 0
+    resultado = [dict(linha, home=0) for linha in tabela]
+    achou = False
+    for linha in resultado:
+        if linha.get(coluna) == NAO_CLASSIFICADO:
+            linha["home"] = home_total
+            achou = True
+    if not achou and home_total:
+        resultado.append({coluna: NAO_CLASSIFICADO, "home": home_total, "auth": 0, "oferta": 0, "acordo": 0})
+    return resultado
+
+
 def agregar_crm_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
     """Conta ações de CRM (home/auth/oferta/acordo) por campanha, na ordem do funil de conversão."""
     return _agregar_crm_por(df, "utm_campaign")
