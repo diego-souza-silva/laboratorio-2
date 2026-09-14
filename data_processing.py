@@ -533,6 +533,22 @@ def carregar_mapa_grupo_estrategico(forcar_reload: bool = False) -> dict:
     return mapa
 
 
+def _montar_mapa_grupo_a_partir_do_disparo(coluna: str, forcar_reload: bool = False) -> dict:
+    """Mapa telefone -> grupo_ab/grupo_estrategico a partir do arquivo de disparo
+    (`carregar_dados_sms()`, já enriquecido por JEKINS) -- a fonte de verdade da
+    Prioridade/Grupo Estratégico neste projeto (ver CLAUDE.md), bem mais completa que
+    o cruzamento por telefone com `ARQUIVO DA BASE INTEIRA/` usado em
+    `carregar_mapa_grupo_ab`/`carregar_mapa_grupo_estrategico` (esse só cobre ~15% dos
+    telefones do log de CRM; o disparo cobre mais de 95%). Descarta linhas sem
+    telefone (disparo por e-mail) e "Não Classificado" (não teria como melhorar o
+    fallback de quem já cai nele)."""
+    disparo = carregar_dados_sms(forcar_reload)
+    if disparo.empty:
+        return {}
+    classificado = disparo[(disparo["telefone_norm"] != "") & (disparo[coluna] != NAO_CLASSIFICADO)]
+    return dict(zip(classificado["telefone_norm"], classificado[coluna]))
+
+
 _COLUNAS_VAZIAS_SMS = [
     "identificador_norm", "telefone_norm", "status_raw", "timestamp", "mensagem", "utm_campaign",
     "status_funil", "disparado", "enviado", "entregue", "falhou", "pendente", "data", "hora",
@@ -651,12 +667,29 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     df = df[df["acao_norm"].isin(ETAPAS_CRM)]
     df["utm_medium"] = df["utm medium"].fillna("").str.strip().str.lower() if "utm medium" in df.columns else ""
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    # Prioridade/Grupo Estratégico do log de CRM: primeiro tenta o mapa a partir do
+    # arquivo de disparo (fonte de verdade, cobre >95% dos telefones do CRM -- ver
+    # `_montar_mapa_grupo_a_partir_do_disparo`), só cai pro cruzamento com `ARQUIVO DA
+    # BASE INTEIRA/` (cobertura bem mais parcial) pra quem não teve disparo casado.
+    # Usar só a base antiga aqui colapsava quase tudo em "Não Classificado" nos
+    # gráficos "Ações de CRM por Prioridade/Grupo Estratégico".
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
-    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
 
+    mapa_grupo_ab_disparo = _montar_mapa_grupo_a_partir_do_disparo("grupo_ab", forcar_reload)
+    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
+    df["grupo_ab"] = (
+        df["telefone_norm"].map(mapa_grupo_ab_disparo)
+        .fillna(df["telefone_norm"].map(mapa_grupo_ab))
+        .fillna(NAO_CLASSIFICADO)
+    )
+
+    mapa_grupo_estrategico_disparo = _montar_mapa_grupo_a_partir_do_disparo("grupo_estrategico", forcar_reload)
     mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
-    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+    df["grupo_estrategico"] = (
+        df["telefone_norm"].map(mapa_grupo_estrategico_disparo)
+        .fillna(df["telefone_norm"].map(mapa_grupo_estrategico))
+        .fillna(NAO_CLASSIFICADO)
+    )
 
     _cache[chave_cache] = df
     return df
