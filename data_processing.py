@@ -1350,6 +1350,13 @@ def filtrar_dados_whatsapp(
         # que vazava campanha antiga sem retorno confirmado pra qualquer filtro
         # (ex.: RCS/WhatsApp Ötima de agosto aparecendo num filtro de setembro).
         no_periodo = (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
+        if utms:
+            # `utms` já restringe (por telefone das campanhas certas, ver
+            # `telefones_das_campanhas`) -- uma linha sem timestamp resolvido (Não
+            # Processado) não deve ser descartada só por não ter data pra comparar
+            # quando a própria campanha dela já está confirmada no período (mesmo
+            # ajuste de `filtrar_dados`, ver CLAUDE.md).
+            no_periodo = no_periodo | filtrado["data"].isna()
         filtrado = filtrado[no_periodo]
     if hora_ini is not None and hora_fim is not None:
         na_janela = filtrado["hora"].isna() | (
@@ -1520,6 +1527,15 @@ def filtrar_dados(
         # que vazava campanha antiga sem retorno confirmado pra qualquer filtro
         # (ex.: RCS/WhatsApp Ötima de agosto aparecendo num filtro de setembro).
         no_periodo = (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
+        if utms:
+            # `utms` já restringe às campanhas certas (por nome/UTM, não pelo `data`
+            # derivado do retorno -- ver CLAUDE.md) -- uma linha sem timestamp
+            # resolvido (Não Processado) não deve ser descartada só por não ter data
+            # pra comparar quando a própria campanha dela já está confirmada no
+            # período; sem essa exceção, "Disparado" de uma campanha inteira ficava
+            # subcontado pelos disparos ainda sem status confirmado pelo fornecedor
+            # (achado real: SMS de setembro perdia 471 de 4.722 disparados assim).
+            no_periodo = no_periodo | filtrado["data"].isna()
         filtrado = filtrado[no_periodo]
     if hora_ini is not None and hora_fim is not None:
         na_janela = filtrado["hora"].isna() | (
