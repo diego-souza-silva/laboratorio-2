@@ -275,7 +275,26 @@ def ler_csv_auto(caminho: Path) -> pd.DataFrame:
     return df
 
 
-def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+def _recuperar_telefone_via_jekins_link(disparo: pd.DataFrame, jekins_path: Path | None) -> pd.Series | None:
+    """Recupera telefone que falhou a normalização (ex.: exportado em notação
+    científica pelo Excel, tipo "5,59299E+12" — trunca os últimos dígitos, dado
+    perdido pra sempre) usando o JEKINS correspondente como fonte alternativa. Junta
+    pela coluna `link` (URL de rastreio única por cliente, presente nos dois arquivos)
+    em vez de telefone, já que é exatamente o telefone que está quebrado. Retorna
+    `None` se não há como recuperar (sem JEKINS, sem coluna `link`, ou o link não bate)."""
+    if jekins_path is None or "link" not in disparo.columns:
+        return None
+    jekins = ler_csv_auto(jekins_path)
+    if "link" not in jekins.columns or "telefone" not in jekins.columns:
+        return None
+    mapa = (
+        jekins[["link", "telefone"]].dropna(subset=["link"]).drop_duplicates("link")
+        .set_index("link")["telefone"]
+    )
+    return disparo["link"].map(mapa).apply(normalizar_telefone)
+
+
+def _preparar_disparo(disparo: pd.DataFrame, jekins_path: Path | None = None) -> tuple[pd.DataFrame, str]:
     """Identifica se o disparo é por telefone (SMS/WhatsApp) ou por e-mail (ex.:
     Salesforce), normaliza o identificador e remove duplicatas. Retorna o tipo
     ("telefone"/"email") para decidir depois como tentar ligar o retorno."""
@@ -304,6 +323,13 @@ def _preparar_disparo(disparo: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         disparo["identificador_norm"] = ""
         tipo = "desconhecido"
 
+    if tipo == "telefone":
+        vazios = disparo["identificador_norm"] == ""
+        if vazios.any():
+            recuperado = _recuperar_telefone_via_jekins_link(disparo, jekins_path)
+            if recuperado is not None:
+                disparo.loc[vazios, "identificador_norm"] = recuperado[vazios]
+
     disparo["telefone_norm"] = disparo["identificador_norm"] if tipo == "telefone" else ""
     disparo = disparo[disparo["identificador_norm"] != ""].drop_duplicates("identificador_norm")
     return disparo, tipo
@@ -313,7 +339,7 @@ def _carregar_campanha(
     utm: str, disparo_path: Path, retorno_path: Path | None, jekins_path: Path | None = None,
 ) -> pd.DataFrame:
     disparo_bruto = ler_csv_auto(disparo_path)
-    disparo, tipo_identificador = _preparar_disparo(disparo_bruto)
+    disparo, tipo_identificador = _preparar_disparo(disparo_bruto, jekins_path)
 
     # Alguns disparos (Airys/Otima/Salesforce) já vêm com a propensão (Prioridade,
     # antigo "grupo_ab")/grupo_estrategico embutidos na própria base — mais confiável
