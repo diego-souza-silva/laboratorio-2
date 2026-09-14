@@ -1375,23 +1375,52 @@ def filtrar_dados_whatsapp(
     return filtrado
 
 
+_ORDEM_MELHOR_STATUS_WHATSAPP = ["Lido", "Entregue", "Enviado", "Nao Entregue", "Nao Enviado"]
+
+
+def _deduplicar_melhor_status_whatsapp(df: pd.DataFrame, chave: list[str] | None = None) -> pd.DataFrame:
+    """Um mesmo telefone pode ter mais de uma linha no retorno (mais de uma mensagem
+    na mesma campanha, ex.: reenvio) -- fica só com a linha do MELHOR status
+    alcançado (Lido > Entregue > Enviado > Não Entregue > Não Enviado), pra não
+    contar o mesmo cliente em mais de um bucket do funil. Achado real: WhatsApp
+    Airys de setembro tinha 5.797 linhas de retorno pra só 5.753 telefones únicos
+    (44 com 2 mensagens cada; 11 deles com status diferente entre as duas, ex.
+    Entregue numa e Lido na outra -- ficam como Lido, o mais avançado). `chave`
+    (default `["telefone_norm"]`) escolhe o nível de dedup -- passar
+    `["telefone_norm", "mensagem_norm"]` na tabela por mensagem-modelo, onde o
+    mesmo cliente recebendo dois TEXTOS diferentes é legítimo (conta nas duas
+    linhas), só reenvio do MESMO texto pro mesmo cliente é que não deve dobrar."""
+    if df.empty or "telefone_norm" not in df.columns:
+        return df
+    chave = chave or ["telefone_norm"]
+    rank = {s: i for i, s in enumerate(_ORDEM_MELHOR_STATUS_WHATSAPP)}
+    d = df.copy()
+    d["_rank_status"] = d["situacao_norm"].map(rank).fillna(len(rank))
+    d = d.sort_values("_rank_status").drop_duplicates(chave, keep="first")
+    return d.drop(columns="_rank_status")
+
+
 def calcular_kpis_whatsapp(df: pd.DataFrame) -> dict:
-    """Contagem simples por status final (Entregue/Lido/Enviado/Não Entregue/Não
-    Enviado) do retorno de WhatsApp, pros cartões de KPI da aba Funil Geral."""
+    """Contagem de CLIENTES ÚNICOS (não eventos brutos) por melhor status alcançado
+    (Entregue/Lido/Enviado/Não Entregue/Não Enviado) do retorno de WhatsApp, pros
+    cartões de KPI da aba Funil Geral -- ver `_deduplicar_melhor_status_whatsapp`."""
     if df.empty:
         return {status: 0 for status in SITUACOES_WHATSAPP}
-    contagem = df["situacao_norm"].value_counts()
+    unico = _deduplicar_melhor_status_whatsapp(df)
+    contagem = unico["situacao_norm"].value_counts()
     return {status: int(contagem.get(status, 0)) for status in SITUACOES_WHATSAPP}
 
 
 def _agregar_whatsapp_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
-    """Contagem de status finais do WhatsApp (Entregue/Lido/Enviado/Não Entregue/Não
-    Enviado) agrupada por uma coluna (grupo_ab ou grupo_estrategico), com as mesmas
-    taxas de entrega/leitura/falha usadas no "Resultado por Mensagem"."""
+    """Contagem de CLIENTES ÚNICOS por melhor status final do WhatsApp (Entregue/
+    Lido/Enviado/Não Entregue/Não Enviado) agrupada por uma coluna (grupo_ab ou
+    grupo_estrategico), com as mesmas taxas de entrega/leitura/falha usadas no
+    "Resultado por Mensagem" -- ver `_deduplicar_melhor_status_whatsapp`."""
     colunas_vazias = [coluna, *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
     if df.empty:
         return pd.DataFrame(columns=colunas_vazias)
 
+    df = _deduplicar_melhor_status_whatsapp(df)
     contagem = df.groupby([coluna, "situacao_norm"]).size().unstack(fill_value=0)
     for status in SITUACOES_WHATSAPP:
         if status not in contagem.columns:
@@ -1462,8 +1491,12 @@ def agregar_whatsapp_por_campanha(
 
 def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:
     """Tabela por mensagem-modelo de WhatsApp (sem a saudação personalizada), com a
-    contagem de cada status final (Entregue/Lido/Enviado/Não Entregue/Não Enviado) e
-    as taxas de entrega/leitura/falha, ordenada da maior para a menor volumetria."""
+    contagem de CLIENTES ÚNICOS por melhor status final (Entregue/Lido/Enviado/Não
+    Entregue/Não Enviado) e as taxas de entrega/leitura/falha, ordenada da maior
+    para a menor volumetria. Dedup por (telefone, mensagem) -- ver
+    `_deduplicar_melhor_status_whatsapp` -- não por telefone sozinho: o mesmo
+    cliente recebendo dois TEXTOS diferentes conta nas duas linhas (legítimo), só
+    reenvio do mesmo texto pro mesmo cliente não deve dobrar."""
     colunas_vazias = ["mensagem_norm", *SITUACOES_WHATSAPP, "total", "taxa_entrega", "taxa_leitura", "taxa_falha"]
     if df.empty:
         return pd.DataFrame(columns=colunas_vazias)
@@ -1472,6 +1505,7 @@ def agregar_mensagem_whatsapp(df: pd.DataFrame) -> pd.DataFrame:
     if validas.empty:
         return pd.DataFrame(columns=colunas_vazias)
 
+    validas = _deduplicar_melhor_status_whatsapp(validas, ["telefone_norm", "mensagem_norm"])
     contagem = validas.groupby(["mensagem_norm", "situacao_norm"]).size().unstack(fill_value=0)
     for status in SITUACOES_WHATSAPP:
         if status not in contagem.columns:
