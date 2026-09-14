@@ -735,7 +735,16 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     # Chave composta (não usa `id`: exports mais antigos e mais novos têm esquemas
     # diferentes, e misturar `id` com linhas sem essa coluna faz o pandas tratar todo
     # NaN como duplicata entre si, descartando quase tudo do arquivo sem `id`).
-    chave = [c for c in ["doc", "utm campaign", "acao", "data"] if c in df.columns]
+    # Mesma armadilha se repete com `doc`: eventos "home" (pré-autenticação) nunca
+    # têm Doc preenchido, então duas linhas de clientes DIFERENTES que visitaram no
+    # mesmo minuto (`data` só tem granularidade de minuto) colapsavam em uma só --
+    # achado real: 20260903-CBabandonocarrinhodia03-kolmeya tinha 78 linhas de Home,
+    # 12 descartadas como "duplicata" por esse motivo, quando só 4 de fato repetiam
+    # IP+minuto (as outras 8 eram clientes diferentes com IPs diferentes no mesmo
+    # minuto). `ip` está presente em ~100% das linhas sem Doc e distingue esses
+    # casos sem prejudicar a deduplicação original (reexport do mesmo evento
+    # preserva o IP).
+    chave = [c for c in ["doc", "utm campaign", "acao", "data", "ip"] if c in df.columns]
     if chave:
         df = df.drop_duplicates(chave)
 
@@ -1824,13 +1833,16 @@ def agregar_por_frase(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _contagem_crm_por_texto(df_origem: pd.DataFrame, coluna_texto: str, df_crm: pd.DataFrame) -> pd.DataFrame:
-    """Contagem de ações de CRM (home/auth/oferta/acordo) por texto-modelo (frase de
-    SMS ou mensagem de WhatsApp/Airys/RCS), cruzando telefone com o log de CRM numa
-    única junção + groupby vetorizados — evita repetir um `isin()` + `value_counts()`
-    por linha de `base` (um `for _, linha in base.iterrows(): df_crm[...isin...]`),
-    que fica caro com pandas quando chamado várias vezes por atualização do dashboard
-    (frase de SMS + mensagem de WhatsApp Ótima/Airys/RCS, cada uma com sua própria
-    tabela texto×grupo_ab e texto×grupo_estratégico)."""
+    """Contagem de CLIENTES ÚNICOS (por telefone) em cada ação de CRM (home/auth/
+    oferta/acordo) por texto-modelo (frase de SMS ou mensagem de WhatsApp/Airys/RCS),
+    cruzando telefone com o log de CRM numa única junção + groupby vetorizados —
+    evita repetir um `isin()` + `value_counts()` por linha de `base` (um `for _,
+    linha in base.iterrows(): df_crm[...isin...]`), que fica caro com pandas quando
+    chamado várias vezes por atualização do dashboard (frase de SMS + mensagem de
+    WhatsApp Ótima/Airys/RCS, cada uma com sua própria tabela texto×grupo_ab e
+    texto×grupo_estratégico). Único (não eventos brutos): uma ação pode repetir pro
+    mesmo cliente em mais de um contato, o que inflaria a contagem acima de quantos
+    clientes de fato avançaram pra cada etapa."""
     colunas = [coluna_texto, *ETAPAS_CRM]
     if df_crm.empty:
         return pd.DataFrame(columns=colunas)
@@ -1839,7 +1851,7 @@ def _contagem_crm_por_texto(df_origem: pd.DataFrame, coluna_texto: str, df_crm: 
     cruzado = df_crm[["telefone_norm", "acao_norm"]].merge(telefone_texto, on="telefone_norm", how="inner")
     if cruzado.empty:
         return pd.DataFrame(columns=colunas)
-    contagem = cruzado.groupby([coluna_texto, "acao_norm"]).size().unstack(fill_value=0)
+    contagem = cruzado.groupby([coluna_texto, "acao_norm"])["telefone_norm"].nunique().unstack(fill_value=0)
     for etapa in ETAPAS_CRM:
         if etapa not in contagem.columns:
             contagem[etapa] = 0
@@ -1933,12 +1945,42 @@ def montar_tabela_mensagem_com_grupo(df_whatsapp: pd.DataFrame, df_crm: pd.DataF
 
 
 def _agregar_crm_por(df: pd.DataFrame, coluna: str) -> pd.DataFrame:
-    contagem = df.groupby([coluna, "acao_norm"]).size().rename("quantidade").reset_index()
+    """Conta CLIENTES ÚNICOS (por telefone) em cada (coluna, ação) -- não eventos
+    brutos. A mesma ação pode ser registrada mais de uma vez pro mesmo cliente (ex.:
+    "Oferta Apresentada" reapresentada em vários contatos), o que inflava a contagem
+    de eventos acima da de clientes de fato alcançados em cada etapa -- chegou a
+    parecer que Oferta > Autenticação num recorte (34 eventos de Oferta vs 23 de
+    Autenticação), quando por cliente único é o esperado (15 com Oferta, subconjunto
+    dos 19 com Autenticação). Linhas sem telefone_norm resolvido não contam como
+    cliente (ver `carregar_dados_crm`/CLAUDE.md sobre "Home" subcontado)."""
+    valido = df[df["telefone_norm"] != ""]
+    contagem = (
+        valido.groupby([coluna, "acao_norm"])["telefone_norm"].nunique().rename("quantidade").reset_index()
+    )
     tabela = contagem.pivot(index=coluna, columns="acao_norm", values="quantidade").fillna(0)
     for etapa in ETAPAS_CRM:
         if etapa not in tabela.columns:
             tabela[etapa] = 0
+    colunas_presentes = df[coluna].unique()
+    tabela = tabela.reindex(colunas_presentes, fill_value=0)
+    tabela.index.name = coluna
     return tabela[ETAPAS_CRM].astype(int).reset_index()
+
+
+def contagem_crm_unicos(df: pd.DataFrame) -> dict:
+    """Clientes únicos (por telefone) em cada etapa do funil de CRM (home/auth/
+    oferta/acordo) -- não eventos brutos. Usado pros totais do funil combinado
+    (Disparo/Envio/Entrega -> Home/Autenticação/Oferta/Acordo): soma direta sobre o
+    escopo já filtrado, não soma de `agregar_crm_por_campanha` campanha a campanha
+    (que devolveria clientes com o mesmo telefone em mais de uma campanha contados
+    mais de uma vez)."""
+    if df.empty:
+        return {etapa: 0 for etapa in ETAPAS_CRM}
+    valido = df[df["telefone_norm"] != ""]
+    return {
+        etapa: int(valido.loc[valido["acao_norm"] == etapa, "telefone_norm"].nunique())
+        for etapa in ETAPAS_CRM
+    }
 
 
 def agregar_crm_por_campanha(df: pd.DataFrame) -> pd.DataFrame:
@@ -1997,13 +2039,16 @@ def montar_pivot_crm(
     total_por_grupo_anterior: dict = {}
 
     for etapa in ETAPAS_CRM:
-        sub = df[df["acao_norm"] == etapa]
+        # Clientes únicos (por telefone) por célula, não eventos brutos -- a mesma
+        # ação pode repetir pro mesmo cliente em mais de um contato (ver
+        # `_agregar_crm_por`); linha sem telefone_norm resolvido não conta.
+        sub = df[(df["acao_norm"] == etapa) & (df["telefone_norm"] != "")]
         if sub.empty:
             continue
 
         pivot = sub.pivot_table(
-            index=coluna_grupo, columns="utm_campaign", values="acao_norm",
-            aggfunc="count", fill_value=0,
+            index=coluna_grupo, columns="utm_campaign", values="telefone_norm",
+            aggfunc="nunique", fill_value=0,
         ).reindex(columns=utms_presentes, fill_value=0)
 
         subtotal = pivot.sum(axis=0)

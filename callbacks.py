@@ -23,7 +23,7 @@ from data_processing import (
     calcular_kpis_whatsapp, campanhas_escopo, canal_da_campanha, carregar_dados_airys,
     carregar_dados_crm, carregar_dados_email_salesforce, carregar_dados_rcs,
     carregar_dados_rcs_estilo_sms, carregar_dados_sms, carregar_dados_whatsapp_mensagem,
-    extremos_data_hora, filtrar_dados, filtrar_dados_whatsapp,
+    contagem_crm_unicos, extremos_data_hora, filtrar_dados, filtrar_dados_whatsapp,
     fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
     montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
     salvar_anotacoes_calendario, total_disparado_campanhas, utms_no_periodo,
@@ -685,9 +685,7 @@ def registrar_callbacks(app):
         agregado_mensagem_whatsapp = agregar_mensagem_whatsapp_com_crm(whatsapp_completo, crm_filtrado)
         agregado_mensagem_airys = agregar_mensagem_whatsapp_com_crm(airys_completo, crm_filtrado)
         agregado_mensagem_rcs = agregar_mensagem_whatsapp_com_crm(rcs_completo, crm_filtrado)
-        totais_crm = crm_agregado[["home", "auth", "oferta", "acordo"]].sum() if not crm_agregado.empty else {
-            "home": 0, "auth": 0, "oferta": 0, "acordo": 0,
-        }
+        totais_crm = contagem_crm_unicos(crm_filtrado)
         colunas_pivot, linhas_pivot = montar_pivot_crm(crm_filtrado, campanhas, "grupo_ab")
         colunas_pivot_ge, linhas_pivot_ge = montar_pivot_crm(crm_filtrado, campanhas, "grupo_estrategico")
 
@@ -735,11 +733,7 @@ def registrar_callbacks(app):
                 crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_otima)]
                 if not crm_filtrado.empty else crm_filtrado
             )
-            crm_agregado_otima_funil = agregar_crm_por_campanha(crm_filtrado_otima) if not crm_filtrado_otima.empty else crm_filtrado_otima
-            totais_crm_otima = (
-                crm_agregado_otima_funil[["home", "auth", "oferta", "acordo"]].sum()
-                if not crm_agregado_otima_funil.empty else {"home": 0, "auth": 0, "oferta": 0, "acordo": 0}
-            )
+            totais_crm_otima = contagem_crm_unicos(crm_filtrado_otima)
             kpis_whatsapp_otima_crm = calcular_kpis_whatsapp(whatsapp_filtrado_crm)
             grafico_funil_crm_combinado = charts.grafico_funil(
                 calcular_funil_combinado_whatsapp(
@@ -759,11 +753,7 @@ def registrar_callbacks(app):
                 crm_filtrado[crm_filtrado["utm_campaign"].isin(utms_crm_airys)]
                 if not crm_filtrado.empty else crm_filtrado
             )
-            crm_agregado_airys_funil = agregar_crm_por_campanha(crm_filtrado_airys) if not crm_filtrado_airys.empty else crm_filtrado_airys
-            totais_crm_airys = (
-                crm_agregado_airys_funil[["home", "auth", "oferta", "acordo"]].sum()
-                if not crm_agregado_airys_funil.empty else {"home": 0, "auth": 0, "oferta": 0, "acordo": 0}
-            )
+            totais_crm_airys = contagem_crm_unicos(crm_filtrado_airys)
             kpis_whatsapp_airys_crm = calcular_kpis_whatsapp(airys_filtrado_crm)
             grafico_funil_crm_airys = charts.grafico_funil(
                 calcular_funil_combinado_whatsapp(
