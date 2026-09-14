@@ -549,6 +549,24 @@ def _montar_mapa_grupo_a_partir_do_disparo(coluna: str, forcar_reload: bool = Fa
     return dict(zip(classificado["telefone_norm"], classificado[coluna]))
 
 
+def _mapa_telefone_grupo(coluna: str, forcar_reload: bool = False) -> dict:
+    """Mapa telefone -> grupo_ab/grupo_estrategico combinando as duas fontes: o
+    arquivo de disparo (`_montar_mapa_grupo_a_partir_do_disparo`, prioritário -- fonte
+    de verdade) com o cruzamento por telefone com `ARQUIVO DA BASE INTEIRA/`
+    (`carregar_mapa_grupo_ab`/`carregar_mapa_grupo_estrategico`, cobertura mais parcial,
+    só preenche quem não teve disparo casado). Usado por qualquer retorno com
+    granularidade por destinatário (WhatsApp Ótima/Airys, RCS) e pelo log de CRM --
+    todos precisam da mesma prioridade de fonte, senão a maioria cai em "Não
+    Classificado" à toa (bug encontrado nos gráficos "Ações de CRM por Prioridade/
+    Grupo Estratégico" e no capítulo de WhatsApp do deck de setembro)."""
+    mapa_base = (
+        carregar_mapa_grupo_ab(forcar_reload) if coluna == "grupo_ab"
+        else carregar_mapa_grupo_estrategico(forcar_reload)
+    )
+    mapa_disparo = _montar_mapa_grupo_a_partir_do_disparo(coluna, forcar_reload)
+    return {**mapa_base, **mapa_disparo}
+
+
 _COLUNAS_VAZIAS_SMS = [
     "identificador_norm", "telefone_norm", "status_raw", "timestamp", "mensagem", "utm_campaign",
     "status_funil", "disparado", "enviado", "entregue", "falhou", "pendente", "data", "hora",
@@ -674,21 +692,9 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     # Usar só a base antiga aqui colapsava quase tudo em "Não Classificado" nos
     # gráficos "Ações de CRM por Prioridade/Grupo Estratégico".
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
-
-    mapa_grupo_ab_disparo = _montar_mapa_grupo_a_partir_do_disparo("grupo_ab", forcar_reload)
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
-    df["grupo_ab"] = (
-        df["telefone_norm"].map(mapa_grupo_ab_disparo)
-        .fillna(df["telefone_norm"].map(mapa_grupo_ab))
-        .fillna(NAO_CLASSIFICADO)
-    )
-
-    mapa_grupo_estrategico_disparo = _montar_mapa_grupo_a_partir_do_disparo("grupo_estrategico", forcar_reload)
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
+    df["grupo_ab"] = df["telefone_norm"].map(_mapa_telefone_grupo("grupo_ab", forcar_reload)).fillna(NAO_CLASSIFICADO)
     df["grupo_estrategico"] = (
-        df["telefone_norm"].map(mapa_grupo_estrategico_disparo)
-        .fillna(df["telefone_norm"].map(mapa_grupo_estrategico))
-        .fillna(NAO_CLASSIFICADO)
+        df["telefone_norm"].map(_mapa_telefone_grupo("grupo_estrategico", forcar_reload)).fillna(NAO_CLASSIFICADO)
     )
 
     _cache[chave_cache] = df
@@ -740,10 +746,10 @@ def _carregar_retorno_estilo_otima(
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
-    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
-    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+    df["grupo_ab"] = df["telefone_norm"].map(_mapa_telefone_grupo("grupo_ab", forcar_reload)).fillna(NAO_CLASSIFICADO)
+    df["grupo_estrategico"] = (
+        df["telefone_norm"].map(_mapa_telefone_grupo("grupo_estrategico", forcar_reload)).fillna(NAO_CLASSIFICADO)
+    )
 
     _cache[chave] = df
     return df
@@ -1018,10 +1024,10 @@ def carregar_dados_airys(forcar_reload: bool = False) -> pd.DataFrame:
     df["data"] = df["timestamp"].dt.date
     df["hora"] = df["timestamp"].dt.hour
 
-    mapa_grupo_ab = carregar_mapa_grupo_ab(forcar_reload)
-    df["grupo_ab"] = df["telefone_norm"].map(mapa_grupo_ab).fillna(NAO_CLASSIFICADO)
-    mapa_grupo_estrategico = carregar_mapa_grupo_estrategico(forcar_reload)
-    df["grupo_estrategico"] = df["telefone_norm"].map(mapa_grupo_estrategico).fillna(NAO_CLASSIFICADO)
+    df["grupo_ab"] = df["telefone_norm"].map(_mapa_telefone_grupo("grupo_ab", forcar_reload)).fillna(NAO_CLASSIFICADO)
+    df["grupo_estrategico"] = (
+        df["telefone_norm"].map(_mapa_telefone_grupo("grupo_estrategico", forcar_reload)).fillna(NAO_CLASSIFICADO)
+    )
 
     _cache[chave] = df
     return df
