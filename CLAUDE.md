@@ -100,7 +100,22 @@ sem retorno ainda casado fica com `data=NaT` e some de qualquer filtro por
 mês — inflando artificialmente a taxa de conversão de um mês fechado (chegou
 a parecer que "Enviado" = "Disparado" dentro do mês). Para recortes
 mensais, use a data embutida no nome do arquivo/UTM da campanha
-(`^(\d{4})(\d{2})(\d{2})`), não o campo `data` derivado do retorno.
+(`^(\d{4})(\d{2})(\d{2})`), não o campo `data` derivado do retorno —
+`utms_no_periodo()` já faz isso pra selecionar as campanhas certas.
+
+**Mas isso não bastava**: `filtrar_dados()`/`filtrar_dados_whatsapp()`
+aplicavam esse mesmo `data_ini`/`data_fim` de novo, linha a linha, mesmo
+depois de já restringir por `utms` — e uma linha `data=NaT` (retorno ainda
+não confirmado pelo fornecedor, ex. "Não Processado" no Kolmeya) era
+descartada por "estar fora do período", mesmo pertencendo à própria
+campanha já confirmada por UTM. Sintoma real (SMS de setembro, campanha
+única): arquivo de disparo tinha 4.722 telefones únicos, mas "Disparado"
+no dashboard/deck mostrava 4.251 — os 471 ainda sem status do Kolmeya
+sumiam do KPI, e Taxa de Envio aparecia 100,0% (quando o real é 90,0%).
+Corrigido: quando `utms` é passado, uma linha `data=NaT` não é mais
+excluída só por isso (a campanha dela já está confirmada no período);
+sem `utms` (filtro só por data), a exclusão de NaT continua — é o que
+evita campanha antiga vazando pra qualquer mês.
 
 ### Prioridade/Grupo Estratégico: sempre a partir do arquivo de disparo
 `carregar_dados_sms()` retorna o disparo de **todos os canais**
