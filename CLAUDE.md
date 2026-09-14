@@ -286,6 +286,47 @@ batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanh
 casamento) antes de tirar qualquer número "% do disparo" da Airys, nunca o
 arquivo bruto direto.
 
+### WhatsApp Airys: exportações são "janela deslizante", não cumulativas — somar arquivos, nunca substituir
+Um export mais novo da Airys **não** necessariamente contém as linhas de um
+export mais antigo — não é um acumulado que cresce, é uma janela de datas que
+desliza pra frente. Verificado com dois arquivos reais de setembro: o export
+de 09/09 (22.756 linhas) cobre 01/09–09/09; o export de 14/09 (28.183 linhas)
+cobre 09/09–14/09 — as 12.452 linhas de 01/09–08/09 do arquivo antigo **não
+existem** no arquivo novo (saíram da janela). Ao mesmo tempo, o dia 09/09 em
+si vem mais completo no arquivo novo (17.370 linhas contra 10.304 no antigo,
+porque status de entrega/leitura chega de forma assíncrona e o export mais
+recente capturou mais atualizações pro mesmo dia) — todas as linhas de 09/09
+do arquivo antigo estão contidas no novo. Decisão: **manter os dois arquivos
+lado a lado** na pasta (nunca apagar/substituir um export antigo por um
+novo) — a sobreposição do dia 09/09 entre os dois é resolvida com segurança
+pelo `_deduplicar_melhor_status_whatsapp()` já existente (mesmo telefone,
+fica o melhor status). Substituir teria descartado silenciosamente os 12.452
+registros reais de 01/09–08/09 que só o arquivo antigo tem. Sempre que uma
+nova exportação da Airys chegar, comparar intervalo de datas e sobreposição
+de linhas contra os arquivos já salvos antes de decidir manter ou descartar
+algum.
+
+### Email Salesforce: parser de outline generalizado (2 formatos, mesma lógica)
+O export "outline" do Journey Builder não tem layout fixo — o número de
+colunas-rótulo (linhas consecutivas por e-mail) varia por tipo de disparo.
+Dois formatos reais já vistos:
+- **5 linhas** (com agrupamento por Jornada): Activity Name, Job ID, Journey
+  Name, Content Name, Subject — cada linha preenche só sua própria coluna de
+  rótulo, repetindo os mesmos valores de métrica nas 5.
+- **3 linhas** (campanhas avulsas tipo `campanha-X-sfmc`, sem Jornada): só
+  Job ID, Content Name, Subject.
+
+`_parse_outline_email_salesforce()` detecta o tamanho do bloco dinamicamente
+a partir de quais colunas de `_COLUNAS_ROTULO_EMAIL_SALESFORCE` estão de fato
+presentes no arquivo, em vez de assumir 5 linhas fixas — feito para tolerar
+um terceiro formato futuro sem precisar de outro hardcode. Como o formato de
+3 linhas não tem `journey_name`/`activity_name`, `carregar_dados_email_
+salesforce()` preenche `Jornada`/`E-mail` com fallback
+(`journey_name.fillna("Campanhas avulsas (Journey Builder)")`,
+`activity_name.fillna(content_name)`) — sem isso, `formatar_tabela_email_
+salesforce()` em `charts.py` quebra com `AttributeError` ao chamar `.replace()`
+num `None`.
+
 ### Email tem duas identidades que não se cruzam
 - **Fonte 1 — Salesforce Journey Builder**: relatório agregado (Envios/
   Entregues/Aberturas/Cliques), sem telefone nem e-mail por linha. Não dá pra
