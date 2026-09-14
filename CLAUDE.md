@@ -126,6 +126,41 @@ da real — bug encontrado e corrigido nesta sessão).
    contra 4 no capítulo RCS. **Isso não é inconsistência a corrigir**, é
    diferença de escopo documentada no rodapé de cada slide afetado.
 
+### CRM log: Mobile vazio em ~47% das linhas — recuperado via CPF, exceto "Home"
+O export do log de CRM (`ARQUIVOS LOG/`) vem com a coluna `Mobile` vazia em
+quase metade de todas as linhas (47% do total; por `utm_medium`: email 87%,
+rcs 96%, sms 64%, whatsapp 36% — varia muito por campanha, 13%–100%). Sem
+telefone, a linha nunca casa com nenhum cruzamento (escopo da campanha ou
+cross-tab irrestrito), mesmo que a ação tenha de fato acontecido — subestimando
+Home/Autenticação/Oferta mesmo dentro do escopo oficial de uma campanha.
+
+`carregar_dados_crm()` recupera a maior parte dessas linhas cruzando o `doc`
+(CPF, com a mesma armadilha de notação científica do telefone — `1.682820e+10`
+— tratada em `_normalizar_cpf`) contra um mapa CPF→telefone combinando
+JEKINS (`cpf`+`telefone`) e `ARQUIVO DA BASE INTEIRA/` (`cpf`+`fone_1..fone_4`)
+— `_mapa_cpf_telefone()`. Reduz o Mobile vazio de 47% para 25% no log inteiro.
+
+**Mas isso não resolve "Home" igualmente**: quando o Mobile de uma linha
+`home` vem vazio, o `doc` também vem vazio em ~100% dos casos (evento
+pré-autenticação — o CRM ainda não identificou o cliente) — nada pra
+recuperar. Já `auth`/`oferta`/`acordo` (pós-autenticação) quase sempre têm
+Mobile **ou** Doc, então a recuperação por CPF eleva bastante esses totais
+sem mexer em Home. Verificado no escopo-campanha (`crm[utm_campaign.isin(...)
+& telefone_norm.isin(telefones_das_campanhas(...))]`, antes → depois do fix):
+
+| Canal    | Home      | Auth        | Oferta      | Acordo   |
+|----------|-----------|-------------|-------------|----------|
+| SMS      | 175 → 175 | 138 → 321   | 136 → 345   | 40 → 40  |
+| WhatsApp | 1523→1523 | 1487 → 2195 | 1309 → 1918 | 123→123  |
+| RCS      | 2 → 2     | 2 → 44      | 2 → 43      | 4 → 4    |
+
+Ou seja: o funil pode parecer "invertido" (Auth/Oferta > Home) num recorte
+qualquer — **isso não é bug nem funil real invertido**, é o piso de Home
+(subcontagem estrutural do export) ficando visivelmente menor que
+Auth/Oferta (quase completos). Sempre que Home aparecer num funil de CRM,
+deixar essa ressalva explícita — nunca apresentar Home como número completo
+ou comparar Home vs. Auth como se fosse um funil sequencial estrito.
+
 ### WhatsApp Airys: gap de casamento de telefone
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
 batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanhas`)
