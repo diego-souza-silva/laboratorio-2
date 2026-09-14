@@ -1142,51 +1142,68 @@ _METRICAS_EMAIL_SALESFORCE = [
 ]
 
 
+_ROTULO_PARA_CHAVE_EMAIL_SALESFORCE = {
+    "Journey Activity Name": "activity_name",
+    "Email Job ID": "job_id",
+    "Journey Name": "journey_name",
+    "Email Content Name": "content_name",
+    "Email Subject": "subject",
+}
+_COLUNAS_ROTULO_EMAIL_SALESFORCE = list(_ROTULO_PARA_CHAVE_EMAIL_SALESFORCE)
+
+
 def _parse_outline_email_salesforce(caminho: Path) -> pd.DataFrame:
-    """Reconstrói o export "Main Metrics" (outline do Salesforce Journey Builder) numa
-    linha por e-mail/dia. O export original vem "achatado": cada e-mail some espalhado
-    em 5 linhas (Activity Name / Job ID / Journey Name / Content Name / Subject), cada
-    uma preenchendo só a sua própria coluna de rótulo — mas repetindo os MESMOS valores
-    de métrica (Sends/Deliveries/Opens/...) nas 5 linhas, já que descrevem o mesmo
-    envio. Linhas com "Journey ID" preenchido são subtotais por jornada (ou o total
-    geral, na última linha) — servem só pra saber a qual jornada os blocos seguintes
-    pertencem, não viram linha própria na tabela final."""
+    """Reconstrói o export "outline" do Salesforce Journey Builder numa linha por
+    e-mail/dia. Cada e-mail vem "achatado" em N linhas, uma por coluna de rótulo
+    presente NESSE export (na ordem de `_COLUNAS_ROTULO_EMAIL_SALESFORCE`), cada uma
+    preenchendo só a sua própria coluna — mas repetindo os MESMOS valores de métrica
+    (Sends/Deliveries/Opens/...) nas N linhas, já que descrevem o mesmo envio.
+    Convive com pelo menos 2 variantes vistas até agora: o "Main Metrics" completo
+    (5 colunas de rótulo, com jornada — "Journey ID" preenchido marca subtotal de
+    jornada, não vira linha própria) e o "Envios - geral" (só 3: Job ID/Content
+    Name/Subject, sem jornada, campanhas avulsas via Journey Builder fora de fluxo).
+    Detecta o tamanho do bloco pelas colunas de rótulo realmente presentes no
+    arquivo — não hardcoda 5, pra não quebrar quando um formato novo aparecer com
+    um subconjunto diferente das mesmas colunas."""
     df = pd.read_excel(caminho)
     df.columns = [str(c).strip() for c in df.columns]
+    colunas_rotulo = [c for c in _COLUNAS_ROTULO_EMAIL_SALESFORCE if c in df.columns]
+    tamanho_bloco = len(colunas_rotulo)
+    if "Email Job ID" not in colunas_rotulo or tamanho_bloco == 0:
+        return pd.DataFrame()
 
     jornada_atual = None
     linhas = []
     i, n = 0, len(df)
     while i < n:
         linha = df.iloc[i]
-        if pd.notna(linha.get("Journey ID")):
+        if "Journey ID" in df.columns and pd.notna(linha.get("Journey ID")):
             jornada_atual = linha.get("Journey ID")
             i += 1
             continue
-        bloco = df.iloc[i:i + 5]
-        if len(bloco) < 5:
+        bloco = df.iloc[i:i + tamanho_bloco]
+        if len(bloco) < tamanho_bloco:
             break
         registro = {
-            "journey_id": jornada_atual,
-            "activity_name": bloco.iloc[0].get("Journey Activity Name"),
-            "job_id": bloco.iloc[1].get("Email Job ID"),
-            "journey_name": bloco.iloc[2].get("Journey Name"),
-            "content_name": bloco.iloc[3].get("Email Content Name"),
-            "subject": bloco.iloc[4].get("Email Subject"),
+            "journey_id": jornada_atual, "activity_name": None, "job_id": None,
+            "journey_name": None, "content_name": None, "subject": None,
         }
+        for offset, coluna_rotulo in enumerate(colunas_rotulo):
+            registro[_ROTULO_PARA_CHAVE_EMAIL_SALESFORCE[coluna_rotulo]] = bloco.iloc[offset].get(coluna_rotulo)
         for coluna in _METRICAS_EMAIL_SALESFORCE:
             if coluna not in bloco.columns:
                 registro[coluna] = None
                 continue
             valores = bloco[coluna].dropna().unique()
             registro[coluna] = valores[0] if len(valores) else None
-        # Se não achou um Job ID de verdade nesse bloco, os 5 linhas não são um e-mail
-        # (ex.: linha "Total" no fim do arquivo) — descarta em vez de virar lixo na tabela.
-        if pd.isna(registro["job_id"]):
+        # Se não achou um Job ID de verdade nesse bloco, as N linhas não são um
+        # e-mail (ex.: linha "Total" no fim do arquivo) — descarta em vez de virar
+        # lixo na tabela.
+        if pd.isna(registro["job_id"]) or str(registro["job_id"]).strip().lower() == "total":
             i += 1
             continue
         linhas.append(registro)
-        i += 5
+        i += tamanho_bloco
 
     return pd.DataFrame(linhas)
 
@@ -1210,8 +1227,12 @@ def carregar_dados_email_salesforce(forcar_reload: bool = False) -> pd.DataFrame
         return df
 
     total_envios = df["Email Sends"].sum()
-    df["Jornada"] = df["journey_name"]
-    df["E-mail"] = df["activity_name"]
+    # Formato "Envios - geral" (sem jornada) não tem journey_name/activity_name --
+    # cai num rótulo genérico de agrupamento e usa o nome da campanha (content_name)
+    # como identificador do e-mail, em vez de None (quebra qualquer `.replace()`/
+    # `.str` rio abaixo, ex. `formatar_tabela_email_salesforce`).
+    df["Jornada"] = df["journey_name"].fillna("Campanhas avulsas (Journey Builder)")
+    df["E-mail"] = df["activity_name"].fillna(df["content_name"])
     df["Assunto"] = df["subject"]
     df["Envios"] = df["Email Sends"].astype(int)
     df["% envios"] = (df["Email Sends"] / total_envios * 100) if total_envios else 0.0
