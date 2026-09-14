@@ -204,14 +204,25 @@ pixel); as outras 8 eram clientes diferentes com IPs diferentes no mesmo
 minuto. `ip` (presente em ~100% das linhas sem `doc`) entrou na chave —
 78→74 linhas de Home nessa campanha, contra os 66 de antes do fix.
 
-**Isso não torna Home identificável por telefone.** Conferido por exaustão
-de colunas (`mobile`, `telefone`, `celular`, `doc`, `email`, `nome`) nas
-linhas de Home sem Mobile: **todas vazias**, mesmo depois do fix de dedup
-— só `ip` e o timestamp de minuto sobram, e nenhum dos dois existe no
-JEKINS nem em nenhum outro arquivo do projeto pra cruzar de volta a um
-telefone. A pergunta "por que não busca no JEKINS?" já foi verificada:
-não há campo em comum. O piso de Home continua valendo (seção acima) — o
-fix de dedup só corrige a contagem bruta de eventos, não a identificação.
+**Isso não torna Home identificável por telefone.** Conferido por exaustão —
+**todas** as ~20 colunas do log foram olhadas linha a linha nessas 74 (não só
+`mobile`/`doc`): `telefone`, `celular`, `email`, `nome`, `url`, `link
+pagamento`, `pagamento link`, `boleto`, `id cliente` vêm **todas vazias**.
+O que sobra preenchido é só: `ip`, `data`/`timestamp` (granularidade de
+minuto), as UTMs da campanha (`utm source/medium/campaign/content/kwd/group`
+— constantes, iguais pra linha inteira, não identificam pessoa), `utm cus`
+(um client ID estilo Google Analytics, formato `<random>.<timestamp>`, não é
+telefone codificado) e `canal` = **"portal"**. Esse último campo é a
+explicação arquitetural: o evento "home" é capturado pelo pixel do **site**
+quando a página carrega, não pelo clique no link único do SMS/WhatsApp —
+nem esse link aparece em nenhuma coluna do log. Ou seja, o sistema
+literalmente ainda não sabe quem é o cliente nesse instante (antes de
+CPF/login), não é falta de exportar um campo que existe em algum lugar. A
+pergunta "por que não busca no JEKINS?" já foi verificada à exaustão: não há
+nenhum campo em comum entre essas linhas e o JEKINS (que só tem
+cpf/telefone/nome/email — nada bate com ip/utm_cus). O piso de Home
+continua valendo (seção acima) — o fix de dedup só corrige a contagem bruta
+de eventos, não a identificação.
 
 ### WhatsApp Airys: gap de casamento de telefone
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
