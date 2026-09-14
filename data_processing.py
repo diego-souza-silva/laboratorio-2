@@ -647,6 +647,58 @@ def _normalizar_telefone_com_ddi(valor) -> str:
     return digitos
 
 
+def _normalizar_cpf(valor) -> str:
+    """CPF como string de 11 dígitos, com zero à esquerda preservado -- o log de CRM
+    às vezes traz o Doc como número (perde zero à esquerda) ou float (`1.682820e+10`,
+    mesma armadilha de notação científica do telefone); aqui só os dígitos importam
+    pra cruzar com o `cpf`/`cpf_mascarado` do JEKINS/ARQUIVO DA BASE INTEIRA, que vêm
+    como string."""
+    if pd.isna(valor):
+        return ""
+    if isinstance(valor, float):
+        valor = f"{valor:.0f}"
+    digitos = re.sub(r"\D", "", str(valor))
+    return digitos.zfill(11) if digitos else ""
+
+
+def _mapa_cpf_telefone(forcar_reload: bool = False) -> dict:
+    """Mapa CPF -> telefone, combinando ARQUIVO DA BASE INTEIRA/ (fone_1..fone_4) com
+    todos os JEKINS/ descobertos (coluna telefone) -- usado em `carregar_dados_crm`
+    como fallback pra recuperar telefone de linhas cujo Mobile veio vazio no export,
+    cruzando pelo Doc (CPF) em vez de telefone. Achado real: quase metade das linhas
+    do log de CRM inteiro (47%) não tem Mobile preenchido; a maioria das que têm Doc
+    (99%) é recuperável por esse cruzamento -- sem ele, Home/Autenticação/Oferta de
+    campanhas inteiras (ex.: SMS de setembro) ficavam artificialmente zeradas no
+    cruzamento por telefone (escopo da campanha), mesmo com a ação de fato registrada
+    no CRM."""
+    chave = "cpf_telefone_mapa"
+    if not forcar_reload and chave in _cache:
+        return _cache[chave]
+
+    partes = []
+    for path in descobrir_jekins().values():
+        jekins = ler_csv_auto(path)
+        if "cpf" in jekins.columns and "telefone" in jekins.columns:
+            partes.append(jekins[["cpf", "telefone"]].rename(columns={"telefone": "fone"}))
+
+    base = _carregar_base_segmentacao(forcar_reload)
+    colunas_fone = [c for c in base.columns if c.startswith("fone_")] if not base.empty else []
+    for c in colunas_fone:
+        partes.append(base[["cpf", c]].rename(columns={c: "fone"}))
+
+    if not partes:
+        _cache[chave] = {}
+        return {}
+
+    longo = pd.concat(partes, ignore_index=True)
+    longo["cpf_norm"] = longo["cpf"].apply(_normalizar_cpf)
+    longo["fone_norm"] = longo["fone"].apply(normalizar_telefone)
+    longo = longo[(longo["cpf_norm"] != "") & (longo["fone_norm"] != "")].drop_duplicates("cpf_norm", keep="first")
+    mapa = dict(zip(longo["cpf_norm"], longo["fone_norm"]))
+    _cache[chave] = mapa
+    return mapa
+
+
 def _utm_sem_token_rcs(utm: str) -> str:
     """UTM sem o token "RCS" (case-insensitive) e em minúsculas — usado pra casar a
     UTM do log de CRM com a UTM do arquivo de disparo mesmo quando só um dos dois
@@ -703,6 +755,17 @@ def carregar_dados_crm(forcar_reload: bool = False) -> pd.DataFrame:
     # Usar só a base antiga aqui colapsava quase tudo em "Não Classificado" nos
     # gráficos "Ações de CRM por Prioridade/Grupo Estratégico".
     df["telefone_norm"] = df["mobile"].apply(_normalizar_telefone_com_ddi)
+    # Mobile vem vazio em ~47% das linhas do log inteiro -- recupera via Doc (CPF),
+    # cruzando com JEKINS/ARQUIVO DA BASE INTEIRA (mesma fonte já usada pra Prioridade/
+    # Grupo Estratégico), antes de qualquer cruzamento por telefone rio abaixo (CRM por
+    # campanha, Fraseologia, etc.) -- sem isso essas linhas nunca batiam com o disparo,
+    # subestimando Home/Autenticação/Oferta mesmo quando a ação existia no CRM.
+    if "doc" in df.columns:
+        vazios = df["telefone_norm"] == ""
+        if vazios.any():
+            mapa_cpf = _mapa_cpf_telefone(forcar_reload)
+            recuperado = df.loc[vazios, "doc"].apply(_normalizar_cpf).map(mapa_cpf)
+            df.loc[vazios, "telefone_norm"] = recuperado.fillna("")
     df["grupo_ab"] = df["telefone_norm"].map(_mapa_telefone_grupo("grupo_ab", forcar_reload)).fillna(NAO_CLASSIFICADO)
     df["grupo_estrategico"] = (
         df["telefone_norm"].map(_mapa_telefone_grupo("grupo_estrategico", forcar_reload)).fillna(NAO_CLASSIFICADO)
