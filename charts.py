@@ -108,9 +108,16 @@ def grafico_funil(
     nomes = [e["etapa"] for e in etapas]
     valores = [e["quantidade"] for e in etapas]
     if modo_percentual == "etapa":
+        # `conversao` vem None quando a etapa anterior está subcontada (etapa atual
+        # maior que ela — ver `_montar_funil`); nesse caso não inventa taxa, mostra
+        # aviso explícito em vez de %.
         textos = [
             f"<b>{formatar_numero(e['quantidade'])}</b><br>"
-            f"{formatar_percentual(e['conversao'])} da etapa anterior"
+            + (
+                f"{formatar_percentual(e['conversao'])} da etapa anterior"
+                if e["conversao"] is not None
+                else "etapa anterior subcontada*"
+            )
             for e in etapas
         ]
     else:
@@ -121,6 +128,8 @@ def grafico_funil(
         ]
     cores = cores or [CORES["disparado"], CORES["enviado"], CORES["entregue"], CORES["falhou"]]
 
+    hover_conversao = [e["conversao"] if e["conversao"] is not None else float("nan") for e in etapas]
+    hover_perda = [e["perda"] if e["perda"] is not None else float("nan") for e in etapas]
     fig = go.Figure(
         go.Funnel(
             y=nomes,
@@ -130,7 +139,7 @@ def grafico_funil(
             textinfo="text",
             marker=dict(color=cores, line=dict(color="#0F1420", width=1)),
             connector=dict(line=dict(color=COR_GRADE, width=1)),
-            customdata=[[e["conversao"], e["perda"]] for e in etapas],
+            customdata=[[c, p] for c, p in zip(hover_conversao, hover_perda)],
             hovertemplate="<b>%{y}</b><br>Quantidade: %{x:,}<br>Conversão vs etapa anterior: "
             "%{customdata[0]:.1f}%<br>Perda vs etapa anterior: %{customdata[1]:.1f}%<extra></extra>",
         )

@@ -1557,6 +1557,15 @@ def _montar_funil(etapas: list[tuple[str, int]]) -> list[dict]:
         if anterior is None:
             conversao = 100.0
             perda = 0.0
+        elif anterior == 0 or valor > anterior:
+            # Etapa maior que a anterior é impossível num funil sequencial real --
+            # sinal de que a etapa anterior está subcontada (ex.: "Home" do CRM,
+            # sem telefone/CPF identificável na maioria das linhas, ver CLAUDE.md),
+            # não de conversão >100%. Não inventa uma taxa aqui (nem 0%, nem
+            # negativa) -- None é tratado pelos renderizadores (`charts.py`,
+            # `tabela_funil_visual` do PPT) como "não comparável".
+            conversao = None
+            perda = None
         else:
             conversao = taxa(valor, anterior)
             perda = 100.0 - conversao

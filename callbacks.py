@@ -86,12 +86,17 @@ def _tabela_funil_html(etapas: list[dict]) -> list:
 
     linhas = [cabecalho]
     for etapa in etapas:
+        # `conversao`/`perda` vêm None quando a etapa anterior está subcontada (etapa
+        # atual maior que ela — ver `_montar_funil`) — mostra "—" em vez de inventar
+        # 0,0% (que pareceria conversão zero quando na verdade não é calculável).
+        texto_conversao = "—" if etapa["conversao"] is None else formatar_percentual(etapa["conversao"])
+        texto_perda = "—" if etapa["perda"] is None else formatar_percentual(etapa["perda"])
         linhas.append(html.Div([
             html.Div(etapa["etapa"]),
             html.Div(formatar_numero(etapa["quantidade"])),
             html.Div(formatar_percentual(etapa["percentual_base"])),
-            html.Div(formatar_percentual(etapa["conversao"]), className="tabela-funil-conversao"),
-            html.Div(formatar_percentual(etapa["perda"]), className="tabela-funil-perda"),
+            html.Div(texto_conversao, className="tabela-funil-conversao"),
+            html.Div(texto_perda, className="tabela-funil-perda"),
         ], className="tabela-funil-linha"))
     return linhas
 
