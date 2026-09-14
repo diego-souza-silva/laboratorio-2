@@ -176,6 +176,43 @@ Auth/Oferta (quase completos). Sempre que Home aparecer num funil de CRM,
 deixar essa ressalva explícita — nunca apresentar Home como número completo
 ou comparar Home vs. Auth como se fosse um funil sequencial estrito.
 
+### Funil de CRM sempre em clientes únicos, nunca em eventos brutos
+`agregar_crm_por_campanha/grupo_ab/grupo_estrategico/medium`,
+`_contagem_crm_por_texto` (Fraseologia) e `montar_pivot_crm` contavam
+**linhas** do log (eventos), não `telefone_norm.nunique()`. Uma mesma ação
+pode ser registrada mais de uma vez pro mesmo cliente — ex.: "Oferta
+Apresentada" reapresentada em várias ligações, um telefone chegou a ter 10
+linhas de Oferta sozinho — o que produzia números como Oferta (34 eventos)
+> Autenticação (23 eventos) num recorte de SMS, parecendo um funil
+invertido de novo (diferente do piso do Home acima: aqui o cliente único
+bate — 15 telefones com Oferta, **todos** também com Autenticação, de 19
+com Autenticação). Corrigido: toda contagem de CRM no projeto agora é por
+cliente único (`contagem_crm_unicos()` para os totais do funil combinado,
+que soma direto sobre o escopo já filtrado — nunca soma
+`agregar_crm_por_campanha` campanha a campanha, que contaria de novo um
+telefone que recebeu mais de uma campanha).
+
+### Dedup do log de CRM: `doc` vazio colapsa clientes diferentes no mesmo minuto
+A chave de deduplicação (`doc, utm campaign, acao, data`) tem a mesma
+armadilha documentada acima pra `id`: evento "home" nunca tem `doc`
+preenchido, e `data` só tem granularidade de minuto — duas linhas de
+clientes **diferentes** que visitaram no mesmo minuto colapsavam em uma só
+"duplicata". Achado real: a campanha de SMS de setembro tinha 78 linhas de
+Home no log bruto, 12 descartadas como duplicata só por `doc=NaN` + mesmo
+minuto — só 4 de fato repetiam **IP** também (duplicata real/replay do
+pixel); as outras 8 eram clientes diferentes com IPs diferentes no mesmo
+minuto. `ip` (presente em ~100% das linhas sem `doc`) entrou na chave —
+78→74 linhas de Home nessa campanha, contra os 66 de antes do fix.
+
+**Isso não torna Home identificável por telefone.** Conferido por exaustão
+de colunas (`mobile`, `telefone`, `celular`, `doc`, `email`, `nome`) nas
+linhas de Home sem Mobile: **todas vazias**, mesmo depois do fix de dedup
+— só `ip` e o timestamp de minuto sobram, e nenhum dos dois existe no
+JEKINS nem em nenhum outro arquivo do projeto pra cruzar de volta a um
+telefone. A pergunta "por que não busca no JEKINS?" já foi verificada:
+não há campo em comum. O piso de Home continua valendo (seção acima) — o
+fix de dedup só corrige a contagem bruta de eventos, não a identificação.
+
 ### WhatsApp Airys: gap de casamento de telefone
 O arquivo de retorno bruto da Airys tem 845 telefones únicos, mas só 707
 batem com o escopo de disparo da própria campanha Airys (`telefones_das_campanhas`)
