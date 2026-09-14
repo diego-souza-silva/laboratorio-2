@@ -1230,9 +1230,12 @@ def filtrar_dados_whatsapp(
     if grupos_estrategicos:
         filtrado = filtrado[filtrado["grupo_estrategico"].isin(grupos_estrategicos)]
     if data_ini is not None and data_fim is not None:
-        no_periodo = filtrado["data"].isna() | (
-            (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
-        )
+        # Disparo sem confirmação de horário na plataforma ("Não Processado", data
+        # NaT) fica de fora do período selecionado, igual qualquer outro -- antes
+        # ficava em TODO período (nunca excluído, por não ter data pra comparar), o
+        # que vazava campanha antiga sem retorno confirmado pra qualquer filtro
+        # (ex.: RCS/WhatsApp Ötima de agosto aparecendo num filtro de setembro).
+        no_periodo = (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
         filtrado = filtrado[no_periodo]
     if hora_ini is not None and hora_fim is not None:
         na_janela = filtrado["hora"].isna() | (
@@ -1397,9 +1400,12 @@ def filtrar_dados(
     if grupos_estrategicos:
         filtrado = filtrado[filtrado["grupo_estrategico"].isin(grupos_estrategicos)]
     if data_ini is not None and data_fim is not None:
-        no_periodo = filtrado["data"].isna() | (
-            (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
-        )
+        # Disparo sem confirmação de horário na plataforma ("Não Processado", data
+        # NaT) fica de fora do período selecionado, igual qualquer outro -- antes
+        # ficava em TODO período (nunca excluído, por não ter data pra comparar), o
+        # que vazava campanha antiga sem retorno confirmado pra qualquer filtro
+        # (ex.: RCS/WhatsApp Ötima de agosto aparecendo num filtro de setembro).
+        no_periodo = (filtrado["data"] >= data_ini) & (filtrado["data"] <= data_fim)
         filtrado = filtrado[no_periodo]
     if hora_ini is not None and hora_fim is not None:
         na_janela = filtrado["hora"].isna() | (

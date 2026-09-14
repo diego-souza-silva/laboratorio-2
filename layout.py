@@ -229,8 +229,9 @@ def _painel_filtros() -> dbc.Card:
             ], className="g-3 align-items-end mt-1"),
             html.P(
                 "Números de disparo sem confirmação de horário na plataforma (\"Não Processado\") "
-                "são mantidos em todos os filtros de Data/Hora, já que não têm um momento de "
-                "envio conhecido para serem excluídos com precisão.",
+                "entram no filtro de Período como qualquer outro (ficam de fora se a data não bate). "
+                "No filtro de Hora do dia, continuam aparecendo em qualquer faixa, já que não têm "
+                "um horário conhecido para comparar.",
                 className="legenda-registros mt-2 mb-0",
             ),
         ]),
