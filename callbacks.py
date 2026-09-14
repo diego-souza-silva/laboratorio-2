@@ -26,7 +26,7 @@ from data_processing import (
     extremos_data_hora, filtrar_dados, filtrar_dados_whatsapp,
     fornecedor_da_campanha, montar_pivot_crm, montar_tabela_frase_com_grupo,
     montar_tabela_grupo_estrategico_com_ab, montar_tabela_mensagem_com_grupo,
-    salvar_anotacoes_calendario, total_disparado_campanhas,
+    salvar_anotacoes_calendario, total_disparado_campanhas, utms_no_periodo,
 )
 from utils import formatar_numero, formatar_percentual, taxa
 
@@ -584,7 +584,9 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
             grupos_estrategicos=grupos_estrategicos,
         )
-        utms_otima_selecionadas = [u for u in (utms or campanhas) if u in utms_whatsapp_otima]
+        utms_otima_selecionadas = utms_no_periodo(
+            [u for u in (utms or campanhas) if u in utms_whatsapp_otima], data_ini_dt, data_fim_dt,
+        )
         agregado_whatsapp_campanha = agregar_whatsapp_por_campanha(
             whatsapp_filtrado_sem_utm, utms_otima_selecionadas,
         )
@@ -608,7 +610,9 @@ def registrar_callbacks(app):
             hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,
             grupos_estrategicos=grupos_estrategicos,
         )
-        utms_airys_selecionadas = [u for u in (utms or campanhas) if u in utms_whatsapp_airys]
+        utms_airys_selecionadas = utms_no_periodo(
+            [u for u in (utms or campanhas) if u in utms_whatsapp_airys], data_ini_dt, data_fim_dt,
+        )
         agregado_airys_campanha = agregar_whatsapp_por_campanha(
             airys_filtrado_sem_utm, utms_airys_selecionadas,
         )
@@ -710,8 +714,12 @@ def registrar_callbacks(app):
             # próprio resultado de CRM, então viram dois funis separados em vez de um
             # combinado (que ficava com o "Disparado" errado e misturava os provedores).
             utms_crm_efetivas = utms_crm or campanhas
-            utms_crm_otima = [u for u in utms_crm_efetivas if u in utms_whatsapp_otima]
-            utms_crm_airys = [u for u in utms_crm_efetivas if u in utms_whatsapp_airys]
+            utms_crm_otima = utms_no_periodo(
+                [u for u in utms_crm_efetivas if u in utms_whatsapp_otima], data_ini_dt, data_fim_dt,
+            )
+            utms_crm_airys = utms_no_periodo(
+                [u for u in utms_crm_efetivas if u in utms_whatsapp_airys], data_ini_dt, data_fim_dt,
+            )
 
             whatsapp_filtrado_crm = filtrar_dados_whatsapp(
                 whatsapp_completo, utms=utms_crm_otima, data_ini=data_ini_dt, data_fim=data_fim_dt,
@@ -781,7 +789,9 @@ def registrar_callbacks(app):
             # `_carregar_retorno_estilo_otima`), então também distingue "Lido" de
             # "Entregue" — usa o mesmo pipeline estilo WhatsApp (não o estilo SMS) pra
             # aproveitar essa etapa extra no funil, igual já é feito pro WhatsApp.
-            utms_crm_rcs = [u for u in (utms_crm or campanhas) if u in utms_rcs]
+            utms_crm_rcs = utms_no_periodo(
+                [u for u in (utms_crm or campanhas) if u in utms_rcs], data_ini_dt, data_fim_dt,
+            )
             rcs_filtrado_crm = filtrar_dados_whatsapp(
                 rcs_completo, utms=utms_crm_rcs, data_ini=data_ini_dt, data_fim=data_fim_dt,
                 hora_ini=hora_ini, hora_fim=hora_fim, grupos_ab=grupos_ab,

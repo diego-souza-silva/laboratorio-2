@@ -26,6 +26,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -2041,6 +2042,27 @@ def calcular_custo_total_por_canal(linhas_custo: list[dict]) -> dict:
 # reescritas à mão) + uma anotação livre editável, persistida em
 # ANOTACOES_CALENDARIO.json (chave = data ISO "AAAA-MM-DD").
 _PADRAO_DATA_UTM = re.compile(r"^(\d{4})(\d{2})(\d{2})")
+
+
+def utms_no_periodo(utms: list[str], data_ini, data_fim) -> list[str]:
+    """Filtra UTMs cuja data embutida no nome (mesmo padrão de `_PADRAO_DATA_UTM`) cai
+    dentro de [data_ini, data_fim]. Usado por KPIs como "Total Disparado" do WhatsApp
+    Ötima/Airys/RCS, que vêm direto do arquivo de disparo via `total_disparado_campanhas`
+    (sem timestamp próprio, por isso não passam pelo filtro de data de
+    `filtrar_dados`/`filtrar_dados_whatsapp`) — sem isso, uma UTM de mês antigo sem
+    campanha nova no período selecionado continuava contando no total. `data_ini`/
+    `data_fim` `None` (nenhum período selecionado) devolve a lista sem filtrar."""
+    if data_ini is None or data_fim is None:
+        return utms
+    resultado = []
+    for utm in utms:
+        m = _PADRAO_DATA_UTM.match(utm)
+        if not m:
+            continue
+        data_utm = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if data_ini <= data_utm <= data_fim:
+            resultado.append(utm)
+    return resultado
 
 
 def resumo_campanhas_por_dia() -> dict[str, list[dict]]:
